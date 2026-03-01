@@ -1,0 +1,25 @@
+"""Seed data for muscle groups."""
+
+MUSCLE_GROUPS = [
+    {"name": "pectoralis_major", "name_ru": "Грудные мышцы", "body_area": "upper_body"},
+    {"name": "latissimus_dorsi", "name_ru": "Широчайшие мышцы спины", "body_area": "upper_body"},
+    {"name": "trapezius", "name_ru": "Трапециевидные мышцы", "body_area": "upper_body"},
+    {"name": "deltoid_anterior", "name_ru": "Передняя дельта", "body_area": "upper_body"},
+    {"name": "deltoid_lateral", "name_ru": "Средняя дельта", "body_area": "upper_body"},
+    {"name": "deltoid_posterior", "name_ru": "Задняя дельта", "body_area": "upper_body"},
+    {"name": "biceps", "name_ru": "Бицепс", "body_area": "upper_body"},
+    {"name": "triceps", "name_ru": "Трицепс", "body_area": "upper_body"},
+    {"name": "forearms", "name_ru": "Предплечья", "body_area": "upper_body"},
+    {"name": "rhomboids", "name_ru": "Ромбовидные мышцы", "body_area": "upper_body"},
+    {"name": "erector_spinae", "name_ru": "Разгибатели спины", "body_area": "core"},
+    {"name": "rectus_abdominis", "name_ru": "Прямая мышца живота", "body_area": "core"},
+    {"name": "obliques", "name_ru": "Косые мышцы живота", "body_area": "core"},
+    {"name": "transverse_abdominis", "name_ru": "Поперечная мышца живота", "body_area": "core"},
+    {"name": "quadriceps", "name_ru": "Квадрицепс", "body_area": "lower_body"},
+    {"name": "hamstrings", "name_ru": "Бицепс бедра", "body_area": "lower_body"},
+    {"name": "glutes", "name_ru": "Ягодичные мышцы", "body_area": "lower_body"},
+    {"name": "calves", "name_ru": "Икроножные мышцы", "body_area": "lower_body"},
+    {"name": "hip_flexors", "name_ru": "Сгибатели бедра", "body_area": "lower_body"},
+    {"name": "adductors", "name_ru": "Приводящие мышцы", "body_area": "lower_body"},
+    {"name": "abductors", "name_ru": "Отводящие мышцы", "body_area": "lower_body"},
+]
