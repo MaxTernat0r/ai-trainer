@@ -17,6 +17,10 @@ class ProfileCreate(BaseModel):
     target_weight_kg: float | None = None
     equipment_available: str | None = None
     training_days_per_week: int | None = None
+    meals_per_day: int | None = None
+    food_allergies: str | None = None
+    disliked_foods: str | None = None
+    custom_health_notes: str | None = None
     medical_restriction_ids: list[str] | None = None
 
 
@@ -35,6 +39,10 @@ class ProfileRead(BaseModel):
     target_weight_kg: float | None = None
     equipment_available: str | None = None
     training_days_per_week: int | None = None
+    meals_per_day: int | None = None
+    food_allergies: str | None = None
+    disliked_foods: str | None = None
+    custom_health_notes: str | None = None
     medical_restrictions: list["MedicalRestrictionRead"] = []
 
     model_config = {"from_attributes": True}

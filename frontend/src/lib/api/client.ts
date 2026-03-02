@@ -22,6 +22,7 @@ async function refreshAccessToken(): Promise<string> {
 export const apiClient = ky.create({
   prefixUrl: `${API_BASE_URL}/api/v1`,
   timeout: 30_000,
+  credentials: 'include',
   retry: { limit: 1, methods: ['get'] },
   hooks: {
     beforeRequest: [

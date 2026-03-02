@@ -1,18 +1,20 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft,
+  ArrowRight,
   Clock,
-  Plus,
   CheckCircle2,
   Timer,
   Dumbbell,
-  ChevronDown,
-  ChevronUp,
+  Loader2,
+  Play,
+  Pause,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -22,83 +24,15 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
-import type { WorkoutSession, ExerciseSet } from '@/types/workout';
-
-// --- Mock data ---
-const mockSession: WorkoutSession = {
-  id: 's1',
-  day_number: 1,
-  name: 'Push Day (Грудь, Плечи, Трицепс)',
-  notes: 'Разминка 5-10 минут на кардио перед тренировкой',
-  order_index: 0,
-  exercises: [
-    {
-      id: 'e1',
-      exercise_id: 'ex1',
-      exercise_name: 'Bench Press',
-      exercise_name_ru: 'Жим штанги лёжа',
-      order_index: 0,
-      target_sets: 4,
-      target_reps: '8-10',
-      target_rest_seconds: 120,
-      notes: 'Контролируйте негативную фазу',
-      logged_sets: [
-        { id: 'ls1', set_number: 1, reps_completed: 10, weight_kg: 80, duration_seconds: null, is_warmup: false, completed_at: '2025-01-15T10:05:00Z' },
-        { id: 'ls2', set_number: 2, reps_completed: 9, weight_kg: 80, duration_seconds: null, is_warmup: false, completed_at: '2025-01-15T10:08:00Z' },
-      ],
-    },
-    {
-      id: 'e2',
-      exercise_id: 'ex2',
-      exercise_name: 'Overhead Press',
-      exercise_name_ru: 'Жим штанги стоя',
-      order_index: 1,
-      target_sets: 3,
-      target_reps: '10-12',
-      target_rest_seconds: 90,
-      notes: null,
-      logged_sets: [],
-    },
-    {
-      id: 'e3',
-      exercise_id: 'ex3',
-      exercise_name: 'Incline Dumbbell Press',
-      exercise_name_ru: 'Жим гантелей на наклонной скамье',
-      order_index: 2,
-      target_sets: 3,
-      target_reps: '10-12',
-      target_rest_seconds: 90,
-      notes: null,
-      logged_sets: [],
-    },
-    {
-      id: 'e4',
-      exercise_id: 'ex4',
-      exercise_name: 'Lateral Raises',
-      exercise_name_ru: 'Разводка гантелей в стороны',
-      order_index: 3,
-      target_sets: 3,
-      target_reps: '12-15',
-      target_rest_seconds: 60,
-      notes: null,
-      logged_sets: [],
-    },
-    {
-      id: 'e5',
-      exercise_id: 'ex5',
-      exercise_name: 'Triceps Pushdown',
-      exercise_name_ru: 'Разгибание рук на блоке',
-      order_index: 4,
-      target_sets: 3,
-      target_reps: '12-15',
-      target_rest_seconds: 60,
-      notes: null,
-      logged_sets: [],
-    },
-  ],
-};
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  useWorkoutPlan,
+  useLogSet,
+  useStartWorkout,
+  useToggleComplete,
+} from '@/lib/queries/use-workouts';
+import type { WorkoutSession } from '@/types/workout';
 
 function formatTime(seconds: number): string {
   const hrs = Math.floor(seconds / 3600);
@@ -117,118 +51,37 @@ interface SetEntry {
   completed: boolean;
 }
 
-export default function WorkoutSessionPage() {
-  const params = useParams();
-  const _workoutId = params.workoutId;
+// ─── Plan Overview (read-only) ───────────────────────────────────────────────
 
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [isTimerRunning, setIsTimerRunning] = useState(true);
-  const [restTimers, setRestTimers] = useState<Record<string, number>>({});
-  const [expandedExercises, setExpandedExercises] = useState<Record<string, boolean>>({
-    e1: true,
-    e2: true,
-  });
+function PlanOverview({ planId }: { planId: string }) {
+  const { data: plan, isLoading } = useWorkoutPlan(planId);
 
-  const [setEntries, setSetEntries] = useState<Record<string, SetEntry[]>>(() => {
-    const entries: Record<string, SetEntry[]> = {};
-    mockSession.exercises.forEach((exercise) => {
-      const sets: SetEntry[] = [];
-      // Pre-fill from logged sets
-      exercise.logged_sets.forEach((ls) => {
-        sets.push({
-          setNumber: ls.set_number,
-          reps: ls.reps_completed?.toString() ?? '',
-          weight: ls.weight_kg?.toString() ?? '',
-          completed: true,
-        });
-      });
-      // Fill remaining target sets
-      for (let i = sets.length; i < exercise.target_sets; i++) {
-        sets.push({
-          setNumber: i + 1,
-          reps: '',
-          weight: '',
-          completed: false,
-        });
-      }
-      entries[exercise.id] = sets;
-    });
-    return entries;
-  });
-
-  // Workout timer
-  useEffect(() => {
-    if (!isTimerRunning) return;
-    const interval = setInterval(() => {
-      setElapsedTime((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isTimerRunning]);
-
-  // Rest timers
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setRestTimers((prev) => {
-        const next = { ...prev };
-        let changed = false;
-        for (const key of Object.keys(next)) {
-          if (next[key] > 0) {
-            next[key] = next[key] - 1;
-            changed = true;
-          }
-        }
-        return changed ? next : prev;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const toggleExercise = (id: string) => {
-    setExpandedExercises((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const updateSet = (exerciseId: string, setIndex: number, field: 'reps' | 'weight', value: string) => {
-    setSetEntries((prev) => {
-      const sets = [...prev[exerciseId]];
-      sets[setIndex] = { ...sets[setIndex], [field]: value };
-      return { ...prev, [exerciseId]: sets };
-    });
-  };
-
-  const completeSet = useCallback((exerciseId: string, setIndex: number, restSeconds: number | null) => {
-    setSetEntries((prev) => {
-      const sets = [...prev[exerciseId]];
-      sets[setIndex] = { ...sets[setIndex], completed: true };
-      return { ...prev, [exerciseId]: sets };
-    });
-    if (restSeconds) {
-      setRestTimers((prev) => ({ ...prev, [exerciseId]: restSeconds }));
-    }
-  }, []);
-
-  const addSet = (exerciseId: string) => {
-    setSetEntries((prev) => {
-      const sets = [...prev[exerciseId]];
-      sets.push({
-        setNumber: sets.length + 1,
-        reps: '',
-        weight: '',
-        completed: false,
-      });
-      return { ...prev, [exerciseId]: sets };
-    });
-  };
-
-  const totalSets = mockSession.exercises.reduce((acc, ex) => acc + ex.target_sets, 0);
-  const completedSets = Object.values(setEntries).reduce(
-    (acc, sets) => acc + sets.filter((s) => s.completed).length,
-    0
-  );
-  const progressPercent = totalSets > 0 ? Math.round((completedSets / totalSets) * 100) : 0;
+  if (isLoading || !plan) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="flex items-center gap-3">
+          <Skeleton className="size-10 rounded-md" />
+          <Skeleton className="h-6 w-2/3" />
+        </div>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Card key={i} className="border-border/50">
+            <CardHeader><Skeleton className="h-5 w-48" /></CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-2">
+                {Array.from({ length: 4 }).map((__, j) => (
+                  <Skeleton key={j} className="h-10 w-full" />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Back and header */}
+      {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/workouts">
@@ -237,235 +90,547 @@ export default function WorkoutSessionPage() {
         </Button>
         <div className="flex-1">
           <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
-            День {mockSession.day_number}: {mockSession.name}
+            {plan.title}
           </h1>
-          {mockSession.notes && (
-            <p className="mt-1 text-sm text-muted-foreground">{mockSession.notes}</p>
+          {plan.description && (
+            <p className="mt-1 text-sm text-muted-foreground">{plan.description}</p>
           )}
         </div>
       </div>
 
-      {/* Timer and progress bar */}
+      {/* Sessions with exercises */}
+      {plan.sessions.map((session) => (
+        <Card key={session.id} className="border-border/50">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">День {session.day_number}</Badge>
+                <CardTitle className="text-base">{session.name}</CardTitle>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {session.exercises.length} упр.
+              </span>
+            </div>
+            {session.notes && (
+              <p className="mt-1 text-sm text-muted-foreground">{session.notes}</p>
+            )}
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-2">
+              {session.exercises.map((exercise, idx) => (
+                <div
+                  key={exercise.id}
+                  className="flex items-center gap-3 rounded-lg border border-border/50 px-4 py-3"
+                >
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                    {idx + 1}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">
+                      {exercise.exercise_name_ru ?? exercise.exercise_name ?? 'Упражнение'}
+                    </p>
+                    {exercise.notes && (
+                      <p className="mt-0.5 text-xs text-muted-foreground truncate">{exercise.notes}</p>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-sm text-muted-foreground">
+                    {exercise.target_sets}&times;{exercise.target_reps}
+                  </span>
+                  {exercise.target_rest_seconds && (
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      отдых {exercise.target_rest_seconds}с
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+
+      <Button variant="outline" asChild className="self-start">
+        <Link href="/workouts">
+          <ArrowLeft className="size-4" />
+          Назад к тренировкам
+        </Link>
+      </Button>
+    </div>
+  );
+}
+
+// ─── Active Workout Session ──────────────────────────────────────────────────
+
+function WorkoutSessionView({
+  planId,
+  sessionId,
+  entryId,
+}: {
+  planId: string;
+  sessionId: string;
+  entryId: string;
+}) {
+  const router = useRouter();
+  const { data: plan, isLoading: planLoading } = useWorkoutPlan(planId, entryId);
+  const logSetMutation = useLogSet();
+  const toggleCompleteMutation = useToggleComplete();
+
+  const session: WorkoutSession | undefined = plan
+    ? plan.sessions.find((s) => s.id === sessionId) ?? plan.sessions[0]
+    : undefined;
+
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [restTimer, setRestTimer] = useState(0);
+  const [setEntries, setSetEntries] = useState<SetEntry[]>([]);
+  const [initialized, setInitialized] = useState(false);
+
+  // Initialize sets for the current exercise
+  const initExerciseSets = useCallback(
+    (exerciseIdx: number) => {
+      if (!session) return;
+      const exercise = session.exercises[exerciseIdx];
+      if (!exercise) return;
+
+      const sets: SetEntry[] = [];
+      exercise.logged_sets.forEach((ls) => {
+        sets.push({
+          setNumber: ls.set_number,
+          reps: ls.reps_completed?.toString() ?? '',
+          weight: ls.weight_kg?.toString() ?? '',
+          completed: true,
+        });
+      });
+      for (let i = sets.length; i < exercise.target_sets; i++) {
+        sets.push({ setNumber: i + 1, reps: '', weight: '', completed: false });
+      }
+      setSetEntries(sets);
+    },
+    [session]
+  );
+
+  // Init on session load
+  useEffect(() => {
+    if (session && !initialized) {
+      let startIdx = 0;
+      for (let i = 0; i < session.exercises.length; i++) {
+        const ex = session.exercises[i];
+        if (ex.logged_sets.length < ex.target_sets) {
+          startIdx = i;
+          break;
+        }
+      }
+      setCurrentExerciseIndex(startIdx);
+      setInitialized(true);
+    }
+  }, [session, initialized]);
+
+  // Re-init sets when exercise changes
+  useEffect(() => {
+    if (session && initialized) {
+      initExerciseSets(currentExerciseIndex);
+    }
+  }, [currentExerciseIndex, session, initialized, initExerciseSets]);
+
+  // Workout timer
+  useEffect(() => {
+    if (!isTimerRunning) return;
+    const interval = setInterval(() => setElapsedTime((p) => p + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isTimerRunning]);
+
+  // Rest timer countdown
+  useEffect(() => {
+    if (restTimer <= 0) return;
+    const interval = setInterval(() => setRestTimer((p) => Math.max(0, p - 1)), 1000);
+    return () => clearInterval(interval);
+  }, [restTimer]);
+
+  const updateSet = (setIndex: number, field: 'reps' | 'weight', value: string) => {
+    setSetEntries((prev) => {
+      const next = [...prev];
+      next[setIndex] = { ...next[setIndex], [field]: value };
+      return next;
+    });
+  };
+
+  const completeSet = (setIndex: number) => {
+    if (!session) return;
+    const exercise = session.exercises[currentExerciseIndex];
+    if (!exercise) return;
+    const set = setEntries[setIndex];
+    if (!set) return;
+
+    if (!isTimerRunning) setIsTimerRunning(true);
+
+    logSetMutation.mutate(
+      {
+        workout_exercise_id: exercise.id,
+        set_number: set.setNumber,
+        reps_completed: set.reps ? Number(set.reps) : null,
+        weight_kg: set.weight ? Number(set.weight) : null,
+        duration_seconds: null,
+        is_warmup: false,
+        scheduled_workout_id: entryId,
+        planId,
+      },
+      {
+        onSuccess: () => {
+          setSetEntries((prev) => {
+            const next = [...prev];
+            next[setIndex] = { ...next[setIndex], completed: true };
+            return next;
+          });
+          const isLastSet = setEntries.filter((s) => !s.completed).length <= 1;
+          if (!isLastSet && exercise.target_rest_seconds) {
+            setRestTimer(exercise.target_rest_seconds);
+          }
+        },
+        onError: () => toast.error('Не удалось сохранить подход'),
+      }
+    );
+  };
+
+  const handleFinishWorkout = () => {
+    toggleCompleteMutation.mutate(entryId, {
+      onSuccess: () => {
+        toast.success('Тренировка завершена!');
+        router.push('/workouts');
+      },
+    });
+  };
+
+  const goToNextExercise = () => {
+    if (!session) return;
+    if (currentExerciseIndex < session.exercises.length - 1) {
+      setCurrentExerciseIndex((p) => p + 1);
+      setRestTimer(0);
+    }
+  };
+
+  const goToPrevExercise = () => {
+    if (currentExerciseIndex > 0) {
+      setCurrentExerciseIndex((p) => p - 1);
+      setRestTimer(0);
+    }
+  };
+
+  if (planLoading || !plan) {
+    return (
+      <div className="flex flex-col gap-6">
+        <Skeleton className="h-8 w-2/3" />
+        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-12">
+        <Dumbbell className="size-12 text-muted-foreground" />
+        <p className="text-lg font-semibold">Сессия не найдена</p>
+        <Button asChild>
+          <Link href="/workouts">Назад к тренировкам</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  const exercise = session.exercises[currentExerciseIndex];
+  const allSetsCompleted = setEntries.length > 0 && setEntries.every((s) => s.completed);
+  const isLastExercise = currentExerciseIndex === session.exercises.length - 1;
+  const totalExercises = session.exercises.length;
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" asChild>
+          <Link href="/workouts">
+            <ArrowLeft className="size-5" />
+          </Link>
+        </Button>
+        <div className="flex-1">
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+            День {session.day_number}: {session.name}
+          </h1>
+        </div>
+      </div>
+
+      {/* Timer + progress */}
       <Card className="border-border/50">
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <div
-                  className={`flex size-10 items-center justify-center rounded-full ${
-                    isTimerRunning ? 'bg-green-500/10' : 'bg-muted'
-                  }`}
-                >
-                  <Clock
-                    className={`size-5 ${
-                      isTimerRunning ? 'text-green-500' : 'text-muted-foreground'
-                    }`}
-                  />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold tabular-nums">{formatTime(elapsedTime)}</p>
-                  <p className="text-xs text-muted-foreground">Время тренировки</p>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsTimerRunning(!isTimerRunning)}
+            <div className="flex items-center gap-3">
+              <div
+                className={`flex size-10 items-center justify-center rounded-full ${
+                  isTimerRunning ? 'bg-green-500/10' : 'bg-muted'
+                }`}
               >
-                {isTimerRunning ? 'Пауза' : 'Продолжить'}
+                <Clock className={`size-5 ${isTimerRunning ? 'text-green-500' : 'text-muted-foreground'}`} />
+              </div>
+              <div>
+                <p className="text-2xl font-bold tabular-nums">{formatTime(elapsedTime)}</p>
+                <p className="text-xs text-muted-foreground">Время тренировки</p>
+              </div>
+              <Button variant="outline" size="icon" onClick={() => setIsTimerRunning(!isTimerRunning)}>
+                {isTimerRunning ? <Pause className="size-4" /> : <Play className="size-4" />}
               </Button>
             </div>
-            <div className="flex flex-col gap-1 sm:items-end">
-              <p className="text-sm text-muted-foreground">
-                Выполнено: {completedSets} / {totalSets} подходов
-              </p>
-              <Progress value={progressPercent} className="h-2 w-full sm:w-48" />
+            <div className="text-sm text-muted-foreground">
+              Упражнение {currentExerciseIndex + 1} из {totalExercises}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Exercise list */}
-      <div className="flex flex-col gap-4">
-        {mockSession.exercises.map((exercise, exerciseIndex) => {
-          const isExpanded = expandedExercises[exercise.id] ?? false;
-          const exerciseSets = setEntries[exercise.id] ?? [];
-          const exerciseCompleted = exerciseSets.every((s) => s.completed);
-          const restTime = restTimers[exercise.id] ?? 0;
+      {/* Rest timer */}
+      {restTimer > 0 && (
+        <Card className="border-blue-500/30 bg-blue-500/5">
+          <CardContent className="flex items-center gap-4 pt-6">
+            <Timer className="size-6 text-blue-500" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Отдых</p>
+              <Progress
+                value={
+                  exercise?.target_rest_seconds
+                    ? ((exercise.target_rest_seconds - restTimer) / exercise.target_rest_seconds) * 100
+                    : 0
+                }
+                className="mt-1 h-2"
+              />
+            </div>
+            <span className="text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400">
+              {formatTime(restTimer)}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => setRestTimer(0)}>
+              Пропустить
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
-          return (
-            <Card
-              key={exercise.id}
-              className={`border-border/50 transition-all ${
-                exerciseCompleted ? 'border-green-500/30 bg-green-500/5' : ''
-              }`}
-            >
-              <CardHeader
-                className="cursor-pointer"
-                onClick={() => toggleExercise(exercise.id)}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-8 items-center justify-center rounded-full bg-muted text-sm font-medium">
-                      {exerciseIndex + 1}
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">
-                        {exercise.exercise_name_ru ?? exercise.exercise_name}
-                      </CardTitle>
-                      <p className="mt-0.5 text-sm text-muted-foreground">
-                        {exercise.target_sets}&times;{exercise.target_reps}
-                        {exercise.target_rest_seconds
-                          ? ` | отдых ${exercise.target_rest_seconds}с`
-                          : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {exerciseCompleted && (
-                      <CheckCircle2 className="size-5 text-green-500" />
-                    )}
-                    {isExpanded ? (
-                      <ChevronUp className="size-4 text-muted-foreground" />
-                    ) : (
-                      <ChevronDown className="size-4 text-muted-foreground" />
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-
-              {isExpanded && (
-                <CardContent>
-                  {exercise.notes && (
-                    <p className="mb-4 rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-                      {exercise.notes}
-                    </p>
-                  )}
-
-                  {/* Rest timer */}
-                  {restTime > 0 && (
-                    <div className="mb-4 flex items-center gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 p-3">
-                      <Timer className="size-5 text-blue-500" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                          Отдых
-                        </p>
-                        <Progress
-                          value={
-                            exercise.target_rest_seconds
-                              ? ((exercise.target_rest_seconds - restTime) /
-                                  exercise.target_rest_seconds) *
-                                100
-                              : 0
-                          }
-                          className="mt-1 h-1.5"
+      {/* Current exercise */}
+      {exercise && (
+        <Card className="border-border/50">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-lg font-bold text-primary">
+                {currentExerciseIndex + 1}
+              </div>
+              <div>
+                <CardTitle className="text-lg">
+                  {exercise.exercise_name_ru ?? exercise.exercise_name ?? 'Упражнение'}
+                </CardTitle>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {exercise.target_sets}&times;{exercise.target_reps}
+                  {exercise.target_rest_seconds ? ` | отдых ${exercise.target_rest_seconds}с` : ''}
+                </p>
+              </div>
+              {allSetsCompleted && <CheckCircle2 className="ml-auto size-6 text-green-500" />}
+            </div>
+            {exercise.notes && (
+              <p className="mt-3 rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                {exercise.notes}
+              </p>
+            )}
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b text-left text-xs text-muted-foreground">
+                    <th className="pb-2 pr-3 font-medium">Подход</th>
+                    <th className="pb-2 pr-3 font-medium">Вес (кг)</th>
+                    <th className="pb-2 pr-3 font-medium">Повторения</th>
+                    <th className="pb-2 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {setEntries.map((set, setIndex) => (
+                    <tr key={setIndex} className="border-b border-border/30 last:border-0">
+                      <td className="py-3 pr-3">
+                        <Badge
+                          variant={set.completed ? 'default' : 'secondary'}
+                          className="min-w-8 justify-center"
+                        >
+                          {set.setNumber}
+                        </Badge>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          value={set.weight}
+                          onChange={(e) => updateSet(setIndex, 'weight', e.target.value)}
+                          disabled={set.completed}
+                          className="h-9 w-24"
                         />
-                      </div>
-                      <span className="text-lg font-bold tabular-nums text-blue-600 dark:text-blue-400">
-                        {formatTime(restTime)}
-                      </span>
-                    </div>
-                  )}
+                      </td>
+                      <td className="py-3 pr-3">
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          value={set.reps}
+                          onChange={(e) => updateSet(setIndex, 'reps', e.target.value)}
+                          disabled={set.completed}
+                          className="h-9 w-24"
+                        />
+                      </td>
+                      <td className="py-3">
+                        {!set.completed ? (
+                          <Button
+                            size="sm"
+                            onClick={() => completeSet(setIndex)}
+                            disabled={!set.reps || !set.weight || logSetMutation.isPending}
+                          >
+                            {logSetMutation.isPending ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="size-4" />
+                            )}
+                            Готово
+                          </Button>
+                        ) : (
+                          <CheckCircle2 className="size-5 text-green-500" />
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-                  {/* Sets table */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b text-left text-xs text-muted-foreground">
-                          <th className="pb-2 pr-3 font-medium">Подход</th>
-                          <th className="pb-2 pr-3 font-medium">Вес (кг)</th>
-                          <th className="pb-2 pr-3 font-medium">Повторения</th>
-                          <th className="pb-2 font-medium"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {exerciseSets.map((set, setIndex) => (
-                          <tr key={setIndex} className="border-b border-border/30 last:border-0">
-                            <td className="py-2.5 pr-3">
-                              <Badge
-                                variant={set.completed ? 'default' : 'secondary'}
-                                className="min-w-8 justify-center"
-                              >
-                                {set.setNumber}
-                              </Badge>
-                            </td>
-                            <td className="py-2.5 pr-3">
-                              <Input
-                                type="number"
-                                placeholder="0"
-                                value={set.weight}
-                                onChange={(e) =>
-                                  updateSet(exercise.id, setIndex, 'weight', e.target.value)
-                                }
-                                disabled={set.completed}
-                                className="h-8 w-20"
-                              />
-                            </td>
-                            <td className="py-2.5 pr-3">
-                              <Input
-                                type="number"
-                                placeholder="0"
-                                value={set.reps}
-                                onChange={(e) =>
-                                  updateSet(exercise.id, setIndex, 'reps', e.target.value)
-                                }
-                                disabled={set.completed}
-                                className="h-8 w-20"
-                              />
-                            </td>
-                            <td className="py-2.5">
-                              {!set.completed ? (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    completeSet(
-                                      exercise.id,
-                                      setIndex,
-                                      exercise.target_rest_seconds
-                                    )
-                                  }
-                                  disabled={!set.reps || !set.weight}
-                                  className="h-8"
-                                >
-                                  <CheckCircle2 className="size-3.5" />
-                                </Button>
-                              ) : (
-                                <CheckCircle2 className="size-5 text-green-500" />
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+      {/* Navigation */}
+      <div className="flex items-center justify-between">
+        <Button variant="outline" onClick={goToPrevExercise} disabled={currentExerciseIndex === 0}>
+          <ArrowLeft className="size-4" />
+          Предыдущее
+        </Button>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mt-3 w-full"
-                    onClick={() => addSet(exercise.id)}
-                  >
-                    <Plus className="size-3.5" />
-                    Добавить подход
-                  </Button>
-                </CardContent>
-              )}
-            </Card>
-          );
-        })}
+        {allSetsCompleted && !isLastExercise ? (
+          <Button onClick={goToNextExercise}>
+            Следующее упражнение
+            <ArrowRight className="size-4" />
+          </Button>
+        ) : isLastExercise && allSetsCompleted ? (
+          <Button onClick={handleFinishWorkout} disabled={toggleCompleteMutation.isPending}>
+            {toggleCompleteMutation.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Dumbbell className="size-4" />
+            )}
+            Завершить тренировку
+          </Button>
+        ) : (
+          <Button variant="outline" onClick={goToNextExercise} disabled={isLastExercise}>
+            Пропустить
+            <ArrowRight className="size-4" />
+          </Button>
+        )}
       </div>
 
-      {/* Finish workout */}
-      <Separator />
-      <div className="flex justify-center pb-4">
-        <Button size="lg" className="w-full sm:w-auto" asChild>
-          <Link href="/workouts">
-            <Dumbbell className="size-4" />
-            Завершить тренировку
-          </Link>
-        </Button>
+      {/* Exercise list mini-nav */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {session.exercises.map((ex, idx) => (
+          <button
+            key={ex.id}
+            type="button"
+            onClick={() => { setCurrentExerciseIndex(idx); setRestTimer(0); }}
+            className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-medium transition-colors ${
+              idx === currentExerciseIndex
+                ? 'bg-primary text-primary-foreground'
+                : idx < currentExerciseIndex
+                  ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                  : 'bg-muted text-muted-foreground'
+            }`}
+          >
+            {idx + 1}
+          </button>
+        ))}
       </div>
     </div>
   );
+}
+
+// ─── Entry Resolver ──────────────────────────────────────────────────────────
+// Ensures we always have a ScheduledWorkout entry before starting the session.
+
+function WorkoutSessionResolver({
+  planId,
+  sessionId,
+  entryId,
+}: {
+  planId: string;
+  sessionId: string;
+  entryId: string | null;
+}) {
+  const router = useRouter();
+  const startWorkoutMutation = useStartWorkout();
+  const [resolvedEntryId, setResolvedEntryId] = useState<string | null>(entryId);
+
+  useEffect(() => {
+    if (resolvedEntryId) return;
+
+    // No entry ID provided — create/find one for today
+    const today = new Date().toISOString().split('T')[0];
+    startWorkoutMutation.mutate(
+      { session_id: sessionId, scheduled_date: today },
+      {
+        onSuccess: (entry) => {
+          setResolvedEntryId(entry.id);
+          // Update URL with entry param without full navigation
+          router.replace(`/workouts/${planId}?session=${sessionId}&entry=${entry.id}`);
+        },
+        onError: () => {
+          toast.error('Не удалось начать тренировку');
+          router.push('/workouts');
+        },
+      }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!resolvedEntryId) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-12">
+        <Loader2 className="size-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Подготовка тренировки...</p>
+      </div>
+    );
+  }
+
+  return (
+    <WorkoutSessionView
+      planId={planId}
+      sessionId={sessionId}
+      entryId={resolvedEntryId}
+    />
+  );
+}
+
+// ─── Page Router ─────────────────────────────────────────────────────────────
+
+export default function WorkoutDetailPage() {
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const workoutId = params.workoutId as string;
+  const sessionId = searchParams.get('session');
+  const entryId = searchParams.get('entry');
+
+  if (sessionId) {
+    return (
+      <WorkoutSessionResolver
+        planId={workoutId}
+        sessionId={sessionId}
+        entryId={entryId}
+      />
+    );
+  }
+
+  return <PlanOverview planId={workoutId} />;
 }

@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import app.db.base  # noqa: F401 — ensure all models are registered for relationships
+
 from app.core.exceptions import NotFoundError
 from app.db.session import get_async_session
 from app.dependencies import get_current_user

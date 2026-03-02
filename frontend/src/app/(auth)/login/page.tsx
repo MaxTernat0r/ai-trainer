@@ -48,7 +48,7 @@ export default function LoginPage() {
       const response = await authApi.login(data.email, data.password);
       setAuth(response.access_token, response.user);
       toast.success('Вы успешно вошли в аккаунт');
-      router.push('/dashboard');
+      window.location.href = '/dashboard';
     } catch {
       toast.error('Неверный email или пароль');
     } finally {

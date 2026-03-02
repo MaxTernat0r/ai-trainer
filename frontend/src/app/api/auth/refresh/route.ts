@@ -27,5 +27,13 @@ export async function POST(request: NextRequest) {
     user: data.user,
   });
 
+  // Forward Set-Cookie from backend so refresh token rotation works
+  const setCookie = backendResponse.headers.getSetCookie?.();
+  if (setCookie) {
+    for (const cookie of setCookie) {
+      response.headers.append('Set-Cookie', cookie);
+    }
+  }
+
   return response;
 }

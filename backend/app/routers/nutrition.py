@@ -1,8 +1,10 @@
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Query, UploadFile, File
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
+
+import app.db.base  # noqa: F401 — ensure all models are registered for relationships
 
 from app.core.exceptions import NotFoundError
 from app.db.session import get_async_session
@@ -138,18 +140,19 @@ async def activate_plan(
     return {"detail": "Plan activated"}
 
 
-@router.get("/foods", response_model=list[FoodItemRead])
+@router.get("/foods/search", response_model=list[FoodItemRead])
 async def search_foods(
-    search: str = Query(""),
+    q: str = Query(""),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
+    """Search food items. Frontend calls GET /nutrition/foods/search?q=..."""
     query = select(FoodItem)
-    if search:
+    if q:
         query = query.where(
-            FoodItem.name_ru.ilike(f"%{search}%") | FoodItem.name.ilike(f"%{search}%")
+            FoodItem.name_ru.ilike(f"%{q}%") | FoodItem.name.ilike(f"%{q}%")
         )
     query = query.offset((page - 1) * per_page).limit(per_page)
     result = await db.execute(query)
@@ -171,15 +174,26 @@ async def search_foods(
     ]
 
 
-@router.post("/log", response_model=NutritionLogRead)
+@router.post("/logs", response_model=NutritionLogRead)
 async def log_food(
     data: NutritionLogCreate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
+    """Log a food entry. Frontend calls POST /nutrition/logs."""
+    # Parse logged_at: frontend may send ISO string or None
+    logged_date: date
+    if data.logged_at:
+        try:
+            logged_date = datetime.fromisoformat(data.logged_at.replace("Z", "+00:00")).date()
+        except (ValueError, AttributeError):
+            logged_date = date.today()
+    else:
+        logged_date = date.today()
+
     log = NutritionLog(
         user_id=user.id,
-        food_item_id=data.food_item_id,
+        food_item_id=data.food_item_id if data.food_item_id else None,
         food_name=data.food_name,
         meal_type=data.meal_type,
         quantity_g=data.quantity_g,
@@ -187,7 +201,8 @@ async def log_food(
         protein_g=data.protein_g,
         fat_g=data.fat_g,
         carbs_g=data.carbs_g,
-        logged_at=data.logged_at,
+        photo_url=data.photo_url,
+        logged_at=logged_date,
         notes=data.notes,
     )
     db.add(log)
@@ -201,51 +216,62 @@ async def log_food(
         protein_g=log.protein_g,
         fat_g=log.fat_g,
         carbs_g=log.carbs_g,
+        photo_url=log.photo_url,
         logged_at=log.logged_at,
         notes=log.notes,
     )
 
 
-@router.get("/log", response_model=list[NutritionLogRead])
+@router.get("/logs", response_model=list[NutritionLogRead])
 async def get_food_log(
-    date_from: date = Query(...),
-    date_to: date = Query(...),
+    date_str: str = Query(..., alias="date"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
+    """Get nutrition logs for a specific date. Frontend calls GET /nutrition/logs?date=YYYY-MM-DD."""
+    try:
+        target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        target_date = date.today()
+
     result = await db.execute(
         select(NutritionLog)
         .where(
             NutritionLog.user_id == user.id,
-            NutritionLog.logged_at >= date_from,
-            NutritionLog.logged_at <= date_to,
+            NutritionLog.logged_at == target_date,
         )
         .order_by(NutritionLog.logged_at.desc())
     )
     return [
         NutritionLogRead(
-            id=str(l.id),
-            food_name=l.food_name,
-            meal_type=l.meal_type,
-            quantity_g=l.quantity_g,
-            calories=l.calories,
-            protein_g=l.protein_g,
-            fat_g=l.fat_g,
-            carbs_g=l.carbs_g,
-            photo_url=l.photo_url,
-            logged_at=l.logged_at,
-            notes=l.notes,
+            id=str(log.id),
+            food_name=log.food_name,
+            meal_type=log.meal_type,
+            quantity_g=log.quantity_g,
+            calories=log.calories,
+            protein_g=log.protein_g,
+            fat_g=log.fat_g,
+            carbs_g=log.carbs_g,
+            photo_url=log.photo_url,
+            logged_at=log.logged_at,
+            notes=log.notes,
         )
-        for l in result.scalars()
+        for log in result.scalars()
     ]
 
 
-@router.get("/daily-summary", response_model=DailySummary)
+@router.get("/summary", response_model=DailySummary)
 async def daily_summary(
-    target_date: date = Query(...),
+    date_str: str = Query(..., alias="date"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
+    """Get daily nutrition summary. Frontend calls GET /nutrition/summary?date=YYYY-MM-DD."""
+    try:
+        target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        target_date = date.today()
+
     result = await db.execute(
         select(
             func.coalesce(func.sum(NutritionLog.calories), 0).label("total_cal"),

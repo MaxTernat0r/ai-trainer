@@ -4,7 +4,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queries/keys';
 import { analyticsApi } from '@/lib/api/analytics';
 import type { LogWeightRequest, LogMeasurementRequest } from '@/lib/api/analytics';
-import type { DashboardData, WeightLog, MeasurementLog } from '@/types/analytics';
+import type {
+  DashboardData,
+  WeightLog,
+  MeasurementLog,
+  ExerciseSummary,
+  BestSetPoint,
+  SessionSets,
+  CompletedSession,
+} from '@/types/analytics';
 
 export function useDashboard() {
   return useQuery<DashboardData>({
@@ -47,5 +55,35 @@ export function useLogMeasurement() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
     },
+  });
+}
+
+export function useTrainedExercises() {
+  return useQuery<ExerciseSummary[]>({
+    queryKey: [...queryKeys.analytics.all, 'trained-exercises'],
+    queryFn: analyticsApi.getTrainedExercises,
+  });
+}
+
+export function useExerciseProgress(exerciseId: string | null) {
+  return useQuery<BestSetPoint[]>({
+    queryKey: [...queryKeys.analytics.all, 'exercise-progress', exerciseId],
+    queryFn: () => analyticsApi.getExerciseProgress(exerciseId!),
+    enabled: !!exerciseId,
+  });
+}
+
+export function useExerciseSessions(exerciseId: string | null) {
+  return useQuery<SessionSets[]>({
+    queryKey: [...queryKeys.analytics.all, 'exercise-sessions', exerciseId],
+    queryFn: () => analyticsApi.getExerciseSessions(exerciseId!),
+    enabled: !!exerciseId,
+  });
+}
+
+export function useCompletedSessions() {
+  return useQuery<CompletedSession[]>({
+    queryKey: [...queryKeys.analytics.all, 'completed-sessions'],
+    queryFn: analyticsApi.getCompletedSessions,
   });
 }

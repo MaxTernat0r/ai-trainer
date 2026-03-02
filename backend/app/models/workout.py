@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -40,6 +40,7 @@ class WorkoutSession(BaseModel):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    scheduled_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     workout_plan: Mapped["WorkoutPlan"] = relationship(back_populates="sessions")
     exercises: Mapped[list["WorkoutExercise"]] = relationship(
@@ -67,11 +68,37 @@ class WorkoutExercise(BaseModel):
     logged_sets: Mapped[list["ExerciseSet"]] = relationship(back_populates="workout_exercise", lazy="selectin")
 
 
+class ScheduledWorkout(BaseModel):
+    """A single scheduled occurrence of a workout session.
+
+    When a plan is distributed to the calendar, one row is created per
+    session per week (e.g. 8 weeks × 2 days/week = 16 rows).  Each row
+    can be individually rescheduled.
+    """
+    __tablename__ = "scheduled_workouts"
+
+    workout_plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workout_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    workout_session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workout_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    scheduled_date: Mapped[date] = mapped_column(Date, nullable=False)
+    week_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    workout_plan: Mapped["WorkoutPlan"] = relationship(lazy="selectin")
+    workout_session: Mapped["WorkoutSession"] = relationship(lazy="selectin")
+
+
 class ExerciseSet(BaseModel):
     __tablename__ = "exercise_sets"
 
     workout_exercise_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workout_exercises.id", ondelete="CASCADE"), nullable=False
+    )
+    scheduled_workout_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("scheduled_workouts.id", ondelete="SET NULL"), nullable=True
     )
     set_number: Mapped[int] = mapped_column(Integer, nullable=False)
     reps_completed: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -81,3 +108,4 @@ class ExerciseSet(BaseModel):
     completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     workout_exercise: Mapped["WorkoutExercise"] = relationship(back_populates="logged_sets")
+    scheduled_workout: Mapped["ScheduledWorkout | None"] = relationship()

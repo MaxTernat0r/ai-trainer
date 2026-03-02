@@ -2,12 +2,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import app.db.base  # noqa: F401 — ensure all models are registered for relationships
+
 from app.core.exceptions import NotFoundError
 from app.db.session import get_async_session
 from app.dependencies import get_current_user
 from app.models.profile import MedicalRestriction, UserMedicalRestriction, UserProfile
 from app.models.user import User
-from app.schemas.profile import MedicalRestrictionRead, ProfileCreate, ProfileRead, ProfileUpdate
+from app.schemas.profile import MedicalRestrictionRead, ProfileRead, ProfileUpdate
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
 
@@ -35,6 +37,10 @@ def _profile_to_read(profile: UserProfile) -> ProfileRead:
         target_weight_kg=profile.target_weight_kg,
         equipment_available=profile.equipment_available,
         training_days_per_week=profile.training_days_per_week,
+        meals_per_day=profile.meals_per_day,
+        food_allergies=profile.food_allergies,
+        disliked_foods=profile.disliked_foods,
+        custom_health_notes=profile.custom_health_notes,
         medical_restrictions=restrictions,
     )
 
@@ -55,7 +61,7 @@ async def get_profile(
 
 @router.put("/me", response_model=ProfileRead)
 async def create_or_update_profile(
-    data: ProfileCreate,
+    data: ProfileUpdate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
@@ -64,13 +70,15 @@ async def create_or_update_profile(
     )
     profile = result.scalar_one_or_none()
 
+    update_data = data.model_dump(exclude={"medical_restriction_ids"}, exclude_unset=True)
+
     if profile:
-        for field, value in data.model_dump(exclude={"medical_restriction_ids"}).items():
+        for field, value in update_data.items():
             setattr(profile, field, value)
     else:
         profile = UserProfile(
             user_id=user.id,
-            **data.model_dump(exclude={"medical_restriction_ids"}),
+            **update_data,
         )
         db.add(profile)
         await db.flush()

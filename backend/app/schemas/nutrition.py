@@ -4,6 +4,8 @@ from pydantic import BaseModel
 
 
 class GenerateNutritionRequest(BaseModel):
+    goal: str | None = None
+    daily_calories: int | None = None
     meals_per_day: int = 4
 
 
@@ -69,7 +71,6 @@ class NutritionPlanListRead(BaseModel):
 
 
 class NutritionLogCreate(BaseModel):
-    food_item_id: str | None = None
     food_name: str
     meal_type: str
     quantity_g: float
@@ -77,8 +78,10 @@ class NutritionLogCreate(BaseModel):
     protein_g: float
     fat_g: float
     carbs_g: float
-    logged_at: date
+    photo_url: str | None = None
     notes: str | None = None
+    logged_at: str | None = None
+    food_item_id: str | None = None
 
 
 class NutritionLogRead(BaseModel):

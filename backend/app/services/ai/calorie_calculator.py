@@ -8,9 +8,13 @@ def calculate_bmr(weight_kg: float, height_cm: float, age: int, gender: str) -> 
 
 ACTIVITY_MULTIPLIERS = {
     "sedentary": 1.2,
+    "light": 1.375,
     "lightly_active": 1.375,
+    "moderate": 1.55,
     "moderately_active": 1.55,
+    "active": 1.725,
     "very_active": 1.725,
+    "very_active_extra": 1.9,
     "extra_active": 1.9,
 }
 

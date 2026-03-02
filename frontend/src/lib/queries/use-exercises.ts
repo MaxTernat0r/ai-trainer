@@ -3,10 +3,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queries/keys';
 import { exercisesApi } from '@/lib/api/exercises';
-import type { Exercise, MuscleGroup, Equipment } from '@/lib/api/exercises';
+import type { Exercise, ExerciseListItem, MuscleGroup, Equipment } from '@/lib/api/exercises';
 
 export function useExercises(filters: Record<string, string> = {}) {
-  return useQuery<Exercise[]>({
+  return useQuery<ExerciseListItem[]>({
     queryKey: queryKeys.exercises.list(filters),
     queryFn: () => exercisesApi.getList(filters),
   });

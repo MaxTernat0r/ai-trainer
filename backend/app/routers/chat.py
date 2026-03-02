@@ -3,6 +3,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import app.db.base  # noqa: F401 — ensure all models are registered for relationships
+
 from app.core.exceptions import NotFoundError
 from app.db.session import get_async_session
 from app.dependencies import get_current_user
@@ -11,6 +13,7 @@ from app.models.user import User
 from app.schemas.chat import (
     ChatMessageCreate,
     ChatMessageRead,
+    ConversationCreate,
     ConversationListRead,
     ConversationRead,
 )
@@ -18,19 +21,23 @@ from app.schemas.chat import (
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
-@router.post("/conversations", response_model=ConversationListRead)
+@router.post("/conversations", response_model=ConversationRead)
 async def create_conversation(
+    data: ConversationCreate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    conversation = ChatConversation(user_id=user.id)
+    """Create a new conversation. Frontend sends {title: string|null} and expects
+    a full Conversation response (with empty messages list)."""
+    conversation = ChatConversation(user_id=user.id, title=data.title)
     db.add(conversation)
     await db.flush()
-    return ConversationListRead(
+    return ConversationRead(
         id=str(conversation.id),
         title=conversation.title,
         is_active=conversation.is_active,
         created_at=conversation.created_at,
+        messages=[],
     )
 
 
@@ -125,7 +132,7 @@ async def send_message(
     user_msg = ChatMessage(
         conversation_id=conv.id,
         role="user",
-        content=data.message,
+        content=data.content,
     )
     db.add(user_msg)
     await db.flush()
@@ -135,7 +142,7 @@ async def send_message(
 
     async def event_stream():
         full_response = ""
-        async for chunk in generate_chat_response(user, conv, data.message, db):
+        async for chunk in generate_chat_response(user, conv, data.content, db):
             full_response += chunk
             yield f"data: {chunk}\n\n"
 

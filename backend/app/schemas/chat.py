@@ -3,8 +3,12 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+class ConversationCreate(BaseModel):
+    title: str | None = None
+
+
 class ChatMessageCreate(BaseModel):
-    message: str
+    content: str
 
 
 class ChatMessageRead(BaseModel):

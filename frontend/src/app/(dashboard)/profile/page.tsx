@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import {
   User as UserIcon,
   Mail,
@@ -14,52 +15,27 @@ import {
   Heart,
   Activity,
   Trophy,
+  Loader2,
+  UtensilsCrossed,
+  AlertTriangle,
+  ThumbsDown,
+  NotebookPen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import type { User } from '@/types/user';
-import type { Profile, MedicalRestriction } from '@/types/user';
-
-// --- Mock data ---
-const mockUser: User = {
-  id: 'u1',
-  email: 'ivan.petrov@email.com',
-  is_active: true,
-  is_verified: true,
-  avatar_url: null,
-};
-
-const mockProfile: Profile = {
-  id: 'p1',
-  first_name: 'Иван',
-  last_name: 'Петров',
-  date_of_birth: '1995-06-15',
-  gender: 'male',
-  height_cm: 180,
-  weight_kg: 78.5,
-  experience_level: 'intermediate',
-  goal: 'muscle_gain',
-  sport_type: 'bodybuilding',
-  activity_level: 'moderate',
-  target_weight_kg: 85,
-  equipment_available: 'full_gym',
-  training_days_per_week: 4,
-  medical_restrictions: [
-    {
-      id: 'mr1',
-      name: 'Проблемы с поясницей',
-      description: 'Грыжа L4-L5, избегать осевых нагрузок на позвоночник',
-    },
-  ],
-};
+import { Skeleton } from '@/components/ui/skeleton';
+import { useProfile } from '@/lib/queries/use-profile';
+import { useAuthStore } from '@/lib/stores/auth-store';
+import { authApi } from '@/lib/api/auth';
+import { toast } from 'sonner';
+import type { MedicalRestriction } from '@/types/user';
 
 const genderLabels: Record<string, string> = {
   male: 'Мужской',
@@ -81,6 +57,8 @@ const goalLabels: Record<string, string> = {
   endurance: 'Выносливость',
   health: 'Здоровье',
   recomp: 'Рекомпозиция',
+  general_fitness: 'Общая физическая форма',
+  flexibility: 'Гибкость',
 };
 
 const sportLabels: Record<string, string> = {
@@ -89,6 +67,11 @@ const sportLabels: Record<string, string> = {
   crossfit: 'Кроссфит',
   calisthenics: 'Калистеника',
   general: 'Общая физ. подготовка',
+  gym: 'Тренажёрный зал',
+  running: 'Бег',
+  swimming: 'Плавание',
+  martial_arts: 'Единоборства',
+  other: 'Другое',
 };
 
 const activityLabels: Record<string, string> = {
@@ -114,22 +97,135 @@ function InfoRow({
         <Icon className="size-4" />
         <span className="text-sm">{label}</span>
       </div>
-      <span className="text-sm font-medium">{value ?? '---'}</span>
+      <span className="text-sm font-medium">{value ?? '\u2014'}</span>
+    </div>
+  );
+}
+
+function ProfileSkeleton() {
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Header skeleton */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="mt-2 h-5 w-64" />
+        </div>
+        <Skeleton className="h-10 w-48" />
+      </div>
+
+      {/* Avatar skeleton */}
+      <div className="flex items-center gap-4">
+        <Skeleton className="size-20 rounded-full" />
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-4 w-48" />
+          <Skeleton className="mt-1 h-5 w-28" />
+        </div>
+      </div>
+
+      {/* Cards skeleton */}
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Card key={i} className="border-border/50">
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-3">
+              {Array.from({ length: 3 }).map((__, j) => (
+                <div key={j} className="flex items-center justify-between">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-24" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }
 
 export default function ProfilePage() {
+  const { data: profile, isLoading, isError } = useProfile();
+  const user = useAuthStore((state) => state.user);
+  const clearAuth = useAuthStore((state) => state.clearAuth);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await authApi.logout();
+    } catch {
+      // Even if logout API fails, clear local state
+    } finally {
+      clearAuth();
+      window.location.href = '/login';
+    }
+  };
+
+  if (isLoading) {
+    return <ProfileSkeleton />;
+  }
+
+  if (isError || !profile) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Профиль</h1>
+          <p className="text-muted-foreground">
+            Управляйте персональными данными и настройками
+          </p>
+        </div>
+        <Card className="border-destructive/30">
+          <CardContent className="pt-6">
+            <p className="text-sm text-destructive">
+              Не удалось загрузить данные профиля. Попробуйте обновить страницу.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Separator />
+        <Card className="border-destructive/30">
+          <CardContent className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-medium">Выйти из аккаунта</p>
+              <p className="text-sm text-muted-foreground">
+                Вы будете перенаправлены на страницу входа
+              </p>
+            </div>
+            <Button
+              variant="destructive"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+            >
+              {isLoggingOut ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <LogOut className="size-4" />
+              )}
+              Выйти из аккаунта
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const fullName =
-    [mockProfile.first_name, mockProfile.last_name].filter(Boolean).join(' ') ||
+    [profile.first_name, profile.last_name].filter(Boolean).join(' ') ||
     'Не указано';
-  const memberSince = '15 марта 2025';
-  const age = mockProfile.date_of_birth
+
+  const age = profile.date_of_birth
     ? Math.floor(
-        (Date.now() - new Date(mockProfile.date_of_birth).getTime()) /
+        (Date.now() - new Date(profile.date_of_birth).getTime()) /
           (365.25 * 24 * 60 * 60 * 1000)
       )
     : null;
+
+  const email = user?.email ?? '\u2014';
+  const isVerified = user?.is_verified ?? false;
+  const avatarUrl = user?.avatar_url ?? null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -150,9 +246,9 @@ export default function ProfilePage() {
       {/* Avatar and name */}
       <div className="flex items-center gap-4">
         <div className="flex size-20 items-center justify-center rounded-full bg-primary/10 ring-4 ring-background">
-          {mockUser.avatar_url ? (
+          {avatarUrl ? (
             <img
-              src={mockUser.avatar_url}
+              src={avatarUrl}
               alt="Avatar"
               className="size-full rounded-full object-cover"
             />
@@ -162,9 +258,9 @@ export default function ProfilePage() {
         </div>
         <div>
           <h2 className="text-xl font-bold">{fullName}</h2>
-          <p className="text-sm text-muted-foreground">{mockUser.email}</p>
+          <p className="text-sm text-muted-foreground">{email}</p>
           <div className="mt-1 flex items-center gap-2">
-            {mockUser.is_verified && (
+            {isVerified && (
               <Badge variant="secondary" className="gap-1 text-xs">
                 <Shield className="size-3" />
                 Верифицирован
@@ -185,12 +281,7 @@ export default function ProfilePage() {
         <CardContent>
           <div className="divide-y divide-border/50">
             <InfoRow icon={UserIcon} label="Имя" value={fullName} />
-            <InfoRow icon={Mail} label="Email" value={mockUser.email} />
-            <InfoRow
-              icon={CalendarDays}
-              label="Дата регистрации"
-              value={memberSince}
-            />
+            <InfoRow icon={Mail} label="Email" value={email} />
           </div>
         </CardContent>
       </Card>
@@ -209,8 +300,8 @@ export default function ProfilePage() {
               icon={UserIcon}
               label="Пол"
               value={
-                mockProfile.gender
-                  ? genderLabels[mockProfile.gender] ?? mockProfile.gender
+                profile.gender
+                  ? genderLabels[profile.gender] ?? profile.gender
                   : null
               }
             />
@@ -222,32 +313,28 @@ export default function ProfilePage() {
             <InfoRow
               icon={Ruler}
               label="Рост"
-              value={
-                mockProfile.height_cm ? `${mockProfile.height_cm} см` : null
-              }
+              value={profile.height_cm ? `${profile.height_cm} см` : null}
             />
             <InfoRow
               icon={Scale}
               label="Вес"
-              value={
-                mockProfile.weight_kg ? `${mockProfile.weight_kg} кг` : null
-              }
+              value={profile.weight_kg ? `${profile.weight_kg} кг` : null}
             />
             <InfoRow
               icon={Trophy}
               label="Уровень подготовки"
               value={
-                experienceLabels[mockProfile.experience_level] ??
-                mockProfile.experience_level
+                experienceLabels[profile.experience_level] ??
+                profile.experience_level
               }
             />
             <InfoRow
               icon={Dumbbell}
               label="Уровень активности"
               value={
-                mockProfile.activity_level
-                  ? activityLabels[mockProfile.activity_level] ??
-                    mockProfile.activity_level
+                profile.activity_level
+                  ? activityLabels[profile.activity_level] ??
+                    profile.activity_level
                   : null
               }
             />
@@ -269,8 +356,8 @@ export default function ProfilePage() {
               icon={Target}
               label="Основная цель"
               value={
-                mockProfile.goal
-                  ? goalLabels[mockProfile.goal] ?? mockProfile.goal
+                profile.goal
+                  ? goalLabels[profile.goal] ?? profile.goal
                   : null
               }
             />
@@ -278,8 +365,8 @@ export default function ProfilePage() {
               icon={Scale}
               label="Целевой вес"
               value={
-                mockProfile.target_weight_kg
-                  ? `${mockProfile.target_weight_kg} кг`
+                profile.target_weight_kg
+                  ? `${profile.target_weight_kg} кг`
                   : null
               }
             />
@@ -287,15 +374,15 @@ export default function ProfilePage() {
               icon={Dumbbell}
               label="Вид спорта"
               value={
-                mockProfile.sport_type
-                  ? sportLabels[mockProfile.sport_type] ?? mockProfile.sport_type
+                profile.sport_type
+                  ? sportLabels[profile.sport_type] ?? profile.sport_type
                   : null
               }
             />
             <InfoRow
               icon={CalendarDays}
               label="Тренировочных дней в неделю"
-              value={mockProfile.training_days_per_week}
+              value={profile.training_days_per_week}
             />
           </div>
         </CardContent>
@@ -310,20 +397,15 @@ export default function ProfilePage() {
           </div>
         </CardHeader>
         <CardContent>
-          {mockProfile.medical_restrictions.length > 0 ? (
-            <div className="flex flex-col gap-3">
-              {mockProfile.medical_restrictions.map(
+          {profile.medical_restrictions.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {profile.medical_restrictions.map(
                 (restriction: MedicalRestriction) => (
                   <div
                     key={restriction.id}
-                    className="rounded-lg border border-red-500/20 bg-red-500/5 p-3"
+                    className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2"
                   >
-                    <p className="text-sm font-medium">{restriction.name}</p>
-                    {restriction.description && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {restriction.description}
-                      </p>
-                    )}
+                    <p className="text-sm font-medium">{restriction.description || restriction.name}</p>
                   </div>
                 )
               )}
@@ -333,6 +415,44 @@ export default function ProfilePage() {
               Медицинские ограничения не указаны
             </p>
           )}
+          {profile.custom_health_notes && (
+            <div className="mt-4 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <NotebookPen className="size-4 text-yellow-500" />
+                Дополнительные заметки
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">{profile.custom_health_notes}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Dietary preferences card */}
+      <Card className="border-border/50">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <UtensilsCrossed className="size-5 text-orange-500" />
+            <CardTitle>Диетические предпочтения</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="divide-y divide-border/50">
+            <InfoRow
+              icon={UtensilsCrossed}
+              label="Приёмов пищи в день"
+              value={profile.meals_per_day}
+            />
+            <InfoRow
+              icon={AlertTriangle}
+              label="Аллергии и непереносимости"
+              value={profile.food_allergies || null}
+            />
+            <InfoRow
+              icon={ThumbsDown}
+              label="Нелюбимые продукты"
+              value={profile.disliked_foods || null}
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -346,8 +466,16 @@ export default function ProfilePage() {
               Вы будете перенаправлены на страницу входа
             </p>
           </div>
-          <Button variant="destructive">
-            <LogOut className="size-4" />
+          <Button
+            variant="destructive"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+          >
+            {isLoggingOut ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <LogOut className="size-4" />
+            )}
             Выйти из аккаунта
           </Button>
         </CardContent>

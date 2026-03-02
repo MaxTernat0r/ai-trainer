@@ -17,7 +17,20 @@ export interface WorkoutSession {
   name: string;
   notes: string | null;
   order_index: number;
+  scheduled_date: string | null;
   exercises: WorkoutExercise[];
+}
+
+export interface CalendarEntry {
+  id: string;
+  session_id: string;
+  session_name: string;
+  day_number: number;
+  week_number: number;
+  scheduled_date: string;
+  plan_id: string;
+  plan_title: string;
+  is_completed: boolean;
 }
 
 export interface WorkoutExercise {

@@ -1,5 +1,13 @@
 import { apiClient } from './client';
-import type { DashboardData, WeightLog, MeasurementLog } from '@/types/analytics';
+import type {
+  DashboardData,
+  WeightLog,
+  MeasurementLog,
+  ExerciseSummary,
+  BestSetPoint,
+  SessionSets,
+  CompletedSession,
+} from '@/types/analytics';
 
 export interface LogWeightRequest {
   weight_kg: number;
@@ -36,5 +44,25 @@ export const analyticsApi = {
     return apiClient
       .post('analytics/measurements', { json: data })
       .json<MeasurementLog>();
+  },
+
+  getTrainedExercises: async (): Promise<ExerciseSummary[]> => {
+    return apiClient.get('analytics/exercises-summary').json<ExerciseSummary[]>();
+  },
+
+  getExerciseProgress: async (exerciseId: string): Promise<BestSetPoint[]> => {
+    return apiClient
+      .get(`analytics/exercise-progress/${exerciseId}`)
+      .json<BestSetPoint[]>();
+  },
+
+  getExerciseSessions: async (exerciseId: string): Promise<SessionSets[]> => {
+    return apiClient
+      .get(`analytics/exercise-sessions/${exerciseId}`)
+      .json<SessionSets[]>();
+  },
+
+  getCompletedSessions: async (): Promise<CompletedSession[]> => {
+    return apiClient.get('analytics/completed-sessions').json<CompletedSession[]>();
   },
 };

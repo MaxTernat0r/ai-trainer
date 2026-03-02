@@ -7,6 +7,7 @@ import asyncio
 
 from sqlalchemy import select
 
+import app.db.base  # noqa: F401 — register all models for relationship resolution
 from app.db.session import async_session_factory
 from app.models.exercise import Equipment, Exercise, ExerciseMuscleGroup, MuscleGroup
 from app.models.nutrition import FoodItem

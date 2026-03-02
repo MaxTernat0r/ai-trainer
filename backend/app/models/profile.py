@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 
-from sqlalchemy import Date, Float, ForeignKey, String, Text
+from sqlalchemy import Date, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,6 +27,10 @@ class UserProfile(BaseModel):
     target_weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     equipment_available: Mapped[str | None] = mapped_column(Text, nullable=True)
     training_days_per_week: Mapped[int | None] = mapped_column(nullable=True)
+    meals_per_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    food_allergies: Mapped[str | None] = mapped_column(Text, nullable=True)
+    disliked_foods: Mapped[str | None] = mapped_column(Text, nullable=True)
+    custom_health_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="profile")  # type: ignore[name-defined]  # noqa: F821
     medical_restrictions: Mapped[list["UserMedicalRestriction"]] = relationship(

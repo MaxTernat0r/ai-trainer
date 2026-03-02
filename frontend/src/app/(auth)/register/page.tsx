@@ -54,7 +54,7 @@ export default function RegisterPage() {
       const response = await authApi.register(data.email, data.password);
       setAuth(response.access_token, response.user);
       toast.success('Аккаунт успешно создан');
-      router.push('/dashboard');
+      window.location.href = '/onboarding';
     } catch {
       toast.error('Ошибка при регистрации. Возможно, email уже занят.');
     } finally {

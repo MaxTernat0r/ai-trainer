@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, Dumbbell, Target, Zap } from 'lucide-react';
+import { Search, Dumbbell, Target } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,128 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
-// --- Mock exercise data ---
-interface Exercise {
-  id: string;
-  name: string;
-  name_ru: string;
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
-  exercise_type: 'compound' | 'isolation' | 'cardio';
-  equipment: string | null;
-  primary_muscles: string[];
-}
-
-const mockExercises: Exercise[] = [
-  {
-    id: '1',
-    name: 'Barbell Bench Press',
-    name_ru: 'Жим штанги лёжа',
-    difficulty: 'intermediate',
-    exercise_type: 'compound',
-    equipment: 'Штанга, скамья',
-    primary_muscles: ['Грудь', 'Трицепс', 'Передняя дельта'],
-  },
-  {
-    id: '2',
-    name: 'Squat',
-    name_ru: 'Приседания со штангой',
-    difficulty: 'intermediate',
-    exercise_type: 'compound',
-    equipment: 'Штанга, стойка',
-    primary_muscles: ['Квадрицепс', 'Ягодицы', 'Кор'],
-  },
-  {
-    id: '3',
-    name: 'Deadlift',
-    name_ru: 'Становая тяга',
-    difficulty: 'advanced',
-    exercise_type: 'compound',
-    equipment: 'Штанга',
-    primary_muscles: ['Спина', 'Ягодицы', 'Задняя поверхность бедра'],
-  },
-  {
-    id: '4',
-    name: 'Pull-ups',
-    name_ru: 'Подтягивания',
-    difficulty: 'intermediate',
-    exercise_type: 'compound',
-    equipment: 'Турник',
-    primary_muscles: ['Широчайшие', 'Бицепс'],
-  },
-  {
-    id: '5',
-    name: 'Overhead Press',
-    name_ru: 'Жим штанги стоя',
-    difficulty: 'intermediate',
-    exercise_type: 'compound',
-    equipment: 'Штанга',
-    primary_muscles: ['Плечи', 'Трицепс'],
-  },
-  {
-    id: '6',
-    name: 'Bicep Curls',
-    name_ru: 'Сгибание рук со штангой',
-    difficulty: 'beginner',
-    exercise_type: 'isolation',
-    equipment: 'Штанга / Гантели',
-    primary_muscles: ['Бицепс'],
-  },
-  {
-    id: '7',
-    name: 'Lateral Raises',
-    name_ru: 'Разводка гантелей в стороны',
-    difficulty: 'beginner',
-    exercise_type: 'isolation',
-    equipment: 'Гантели',
-    primary_muscles: ['Средняя дельта'],
-  },
-  {
-    id: '8',
-    name: 'Triceps Pushdown',
-    name_ru: 'Разгибание рук на блоке',
-    difficulty: 'beginner',
-    exercise_type: 'isolation',
-    equipment: 'Блочный тренажёр',
-    primary_muscles: ['Трицепс'],
-  },
-  {
-    id: '9',
-    name: 'Leg Press',
-    name_ru: 'Жим ногами',
-    difficulty: 'beginner',
-    exercise_type: 'compound',
-    equipment: 'Тренажёр',
-    primary_muscles: ['Квадрицепс', 'Ягодицы'],
-  },
-  {
-    id: '10',
-    name: 'Running',
-    name_ru: 'Бег',
-    difficulty: 'beginner',
-    exercise_type: 'cardio',
-    equipment: null,
-    primary_muscles: ['Ноги', 'Кардио'],
-  },
-  {
-    id: '11',
-    name: 'Plank',
-    name_ru: 'Планка',
-    difficulty: 'beginner',
-    exercise_type: 'isolation',
-    equipment: null,
-    primary_muscles: ['Кор', 'Пресс'],
-  },
-  {
-    id: '12',
-    name: 'Barbell Row',
-    name_ru: 'Тяга штанги в наклоне',
-    difficulty: 'advanced',
-    exercise_type: 'compound',
-    equipment: 'Штанга',
-    primary_muscles: ['Широчайшие', 'Ромбовидные', 'Бицепс'],
-  },
-];
+import { Skeleton } from '@/components/ui/skeleton';
+import { useExercises, useMuscleGroups, useEquipment } from '@/lib/queries/use-exercises';
 
 const difficultyLabels: Record<string, string> = {
   beginner: 'Начинающий',
@@ -165,56 +45,34 @@ const typeColors: Record<string, string> = {
   cardio: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
 };
 
-const allMuscleGroups = [
-  'Все',
-  'Грудь',
-  'Спина',
-  'Плечи',
-  'Бицепс',
-  'Трицепс',
-  'Квадрицепс',
-  'Ягодицы',
-  'Кор',
-  'Широчайшие',
-  'Ноги',
-];
-
 export default function ExercisesPage() {
   const [search, setSearch] = useState('');
   const [difficulty, setDifficulty] = useState('all');
   const [exerciseType, setExerciseType] = useState('all');
-  const [muscleGroup, setMuscleGroup] = useState('Все');
+  const [muscleGroupId, setMuscleGroupId] = useState('all');
+  const [equipmentId, setEquipmentId] = useState('all');
 
-  const filtered = useMemo(() => {
-    return mockExercises.filter((ex) => {
-      // Search
-      if (
-        search &&
-        !ex.name_ru.toLowerCase().includes(search.toLowerCase()) &&
-        !ex.name.toLowerCase().includes(search.toLowerCase())
-      ) {
-        return false;
-      }
-      // Difficulty
-      if (difficulty !== 'all' && ex.difficulty !== difficulty) {
-        return false;
-      }
-      // Type
-      if (exerciseType !== 'all' && ex.exercise_type !== exerciseType) {
-        return false;
-      }
-      // Muscle group
-      if (
-        muscleGroup !== 'Все' &&
-        !ex.primary_muscles.some((m) =>
-          m.toLowerCase().includes(muscleGroup.toLowerCase())
-        )
-      ) {
-        return false;
-      }
-      return true;
-    });
-  }, [search, difficulty, exerciseType, muscleGroup]);
+  // Build filters for the API query
+  const filters = useMemo(() => {
+    const f: Record<string, string> = {};
+    if (search.trim()) f.search = search.trim();
+    if (difficulty !== 'all') f.difficulty = difficulty;
+    if (exerciseType !== 'all') f.exercise_type = exerciseType;
+    if (muscleGroupId !== 'all') f.muscle_group_id = muscleGroupId;
+    if (equipmentId !== 'all') f.equipment_id = equipmentId;
+    return f;
+  }, [search, difficulty, exerciseType, muscleGroupId, equipmentId]);
+
+  const { data: exercises, isLoading: exercisesLoading } = useExercises(filters);
+  const { data: muscleGroups } = useMuscleGroups();
+  const { data: equipmentList } = useEquipment();
+
+  const hasActiveFilters =
+    difficulty !== 'all' ||
+    exerciseType !== 'all' ||
+    muscleGroupId !== 'all' ||
+    equipmentId !== 'all' ||
+    search.trim().length > 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -265,27 +123,43 @@ export default function ExercisesPage() {
           </SelectContent>
         </Select>
 
-        <Select value={muscleGroup} onValueChange={setMuscleGroup}>
+        <Select value={muscleGroupId} onValueChange={setMuscleGroupId}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Группа мышц" />
           </SelectTrigger>
           <SelectContent>
-            {allMuscleGroups.map((group) => (
-              <SelectItem key={group} value={group}>
-                {group}
+            <SelectItem value="all">Все мышцы</SelectItem>
+            {muscleGroups?.map((group) => (
+              <SelectItem key={group.id} value={group.id}>
+                {group.name_ru}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
-        {(difficulty !== 'all' || exerciseType !== 'all' || muscleGroup !== 'Все' || search) && (
+        <Select value={equipmentId} onValueChange={setEquipmentId}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Оборудование" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Любое оборудование</SelectItem>
+            {equipmentList?.map((eq) => (
+              <SelectItem key={eq.id} value={eq.id}>
+                {eq.name_ru}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {hasActiveFilters && (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
               setDifficulty('all');
               setExerciseType('all');
-              setMuscleGroup('Все');
+              setMuscleGroupId('all');
+              setEquipmentId('all');
               setSearch('');
             }}
           >
@@ -295,78 +169,94 @@ export default function ExercisesPage() {
       </div>
 
       {/* Results count */}
-      <p className="text-sm text-muted-foreground">
-        Найдено: {filtered.length}{' '}
-        {filtered.length === 1
-          ? 'упражнение'
-          : filtered.length < 5
-            ? 'упражнения'
-            : 'упражнений'}
-      </p>
+      {!exercisesLoading && exercises && (
+        <p className="text-sm text-muted-foreground">
+          Найдено: {exercises.length}{' '}
+          {exercises.length === 1
+            ? 'упражнение'
+            : exercises.length < 5
+              ? 'упражнения'
+              : 'упражнений'}
+        </p>
+      )}
+
+      {/* Loading skeleton */}
+      {exercisesLoading && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-2">
+                  <Skeleton className="h-5 w-3/4" />
+                  <Skeleton className="size-8 rounded-lg" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col gap-3">
+                  <div className="flex gap-1.5">
+                    <Skeleton className="h-5 w-20 rounded-full" />
+                    <Skeleton className="h-5 w-20 rounded-full" />
+                  </div>
+                  <Skeleton className="h-4 w-2/3" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Exercise grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((exercise) => (
-          <Card
-            key={exercise.id}
-            className="border-border/50 transition-colors hover:border-primary/20 hover:shadow-md"
-          >
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between gap-2">
-                <CardTitle className="text-base">
-                  {exercise.name_ru}
-                </CardTitle>
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
-                  <Dumbbell className="size-4 text-muted-foreground" />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col gap-3">
-                {/* Badges row */}
-                <div className="flex flex-wrap gap-1.5">
-                  <Badge
-                    variant="outline"
-                    className={difficultyColors[exercise.difficulty]}
-                  >
-                    {difficultyLabels[exercise.difficulty]}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className={typeColors[exercise.exercise_type]}
-                  >
-                    {typeLabels[exercise.exercise_type]}
-                  </Badge>
-                </div>
-
-                {/* Equipment */}
-                {exercise.equipment && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Target className="size-3.5" />
-                    <span>{exercise.equipment}</span>
+      {!exercisesLoading && exercises && exercises.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {exercises.map((exercise) => (
+            <Card
+              key={exercise.id}
+              className="border-border/50 transition-colors hover:border-primary/20 hover:shadow-md"
+            >
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-2">
+                  <CardTitle className="text-base">
+                    {exercise.name_ru}
+                  </CardTitle>
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                    <Dumbbell className="size-4 text-muted-foreground" />
                   </div>
-                )}
-
-                {/* Muscle groups */}
-                <div className="flex flex-wrap gap-1">
-                  {exercise.primary_muscles.map((muscle) => (
-                    <Badge
-                      key={muscle}
-                      variant="secondary"
-                      className="text-xs"
-                    >
-                      {muscle}
-                    </Badge>
-                  ))}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col gap-3">
+                  {/* Badges row */}
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge
+                      variant="outline"
+                      className={difficultyColors[exercise.difficulty] ?? ''}
+                    >
+                      {difficultyLabels[exercise.difficulty] ?? exercise.difficulty}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={typeColors[exercise.exercise_type] ?? ''}
+                    >
+                      {typeLabels[exercise.exercise_type] ?? exercise.exercise_type}
+                    </Badge>
+                  </div>
+
+                  {/* Equipment */}
+                  {exercise.equipment && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Target className="size-3.5" />
+                      <span>{exercise.equipment.name_ru}</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* No results */}
-      {filtered.length === 0 && (
+      {!exercisesLoading && exercises && exercises.length === 0 && (
         <div className="flex flex-col items-center justify-center gap-4 py-12">
           <div className="flex size-16 items-center justify-center rounded-full bg-muted">
             <Search className="size-8 text-muted-foreground" />

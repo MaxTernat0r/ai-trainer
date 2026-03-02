@@ -28,6 +28,10 @@ export interface Profile {
   target_weight_kg: number | null;
   equipment_available: string | null;
   training_days_per_week: number | null;
+  meals_per_day: number | null;
+  food_allergies: string | null;
+  disliked_foods: string | null;
+  custom_health_notes: string | null;
   medical_restrictions: MedicalRestriction[];
 }
 
@@ -51,5 +55,9 @@ export interface OnboardingData {
   target_weight_kg: number | null;
   equipment_available: string;
   training_days_per_week: number;
+  meals_per_day: number;
+  food_allergies: string;
+  disliked_foods: string;
+  custom_health_notes: string;
   medical_restriction_ids: string[];
 }

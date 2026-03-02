@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -15,6 +15,7 @@ class ExerciseSetLog(BaseModel):
     weight_kg: float | None = None
     duration_seconds: int | None = None
     is_warmup: bool = False
+    scheduled_workout_id: str | None = None
 
 
 class WorkoutExerciseRead(BaseModel):
@@ -50,9 +51,32 @@ class WorkoutSessionRead(BaseModel):
     name: str
     notes: str | None = None
     order_index: int
+    scheduled_date: date | None = None
     exercises: list[WorkoutExerciseRead] = []
 
     model_config = {"from_attributes": True}
+
+
+class RescheduleRequest(BaseModel):
+    scheduled_date: date
+
+
+class AddScheduleEntryRequest(BaseModel):
+    session_id: str
+    scheduled_date: date
+    is_completed: bool = False
+
+
+class CalendarEntry(BaseModel):
+    id: str  # scheduled_workout id
+    session_id: str
+    session_name: str
+    day_number: int
+    week_number: int
+    scheduled_date: date
+    plan_id: str
+    plan_title: str
+    is_completed: bool = False
 
 
 class WorkoutPlanRead(BaseModel):
