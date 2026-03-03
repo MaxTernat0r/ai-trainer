@@ -9,7 +9,7 @@ import json
 import logging
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -219,6 +219,13 @@ async def generate_nutrition_plan(
         if "meals" not in plan_data or not plan_data["meals"]:
             raise AIServiceError("AI generated an empty nutrition plan with no meals")
 
+        # Deactivate existing plans
+        await db.execute(
+            update(NutritionPlan)
+            .where(NutritionPlan.user_id == user.id)
+            .values(is_active=False)
+        )
+
         # Save NutritionPlan to database
         nutrition_plan = NutritionPlan(
             user_id=user.id,
@@ -228,7 +235,7 @@ async def generate_nutrition_plan(
             daily_fat_g=macros["fat_g"],
             daily_carbs_g=macros["carbs_g"],
             is_ai_generated=True,
-            is_active=False,
+            is_active=True,
             ai_prompt_snapshot=user_message[:2000],
         )
         db.add(nutrition_plan)

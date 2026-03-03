@@ -47,6 +47,7 @@ import {
   useDailySummary,
   useNutritionLogs,
   useNutritionPlans,
+  useNutritionPlan,
   useLogFood,
   useRecognizeFood,
   useGenerateNutrition,
@@ -259,6 +260,7 @@ export default function NutritionPage() {
 
   // Derive active plan targets
   const activePlan: NutritionPlan | undefined = plans?.find((p) => p.is_active);
+  const { data: fullPlan } = useNutritionPlan(activePlan?.id);
   const targets = {
     calories: activePlan?.daily_calories ?? 2500,
     protein: activePlan?.daily_protein_g ?? 180,
@@ -483,6 +485,86 @@ export default function NutritionPage() {
           </Badge>
         </div>
       )}
+
+      {/* Plan meals display */}
+      {fullPlan && fullPlan.meals && fullPlan.meals.length > 0 ? (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">Мой план</h2>
+          {fullPlan.meals.map((meal) => {
+            const mealCalories = meal.items?.reduce((sum, item) => {
+              return sum + Math.round((item.food_item.calories_per_100g * item.quantity_g) / 100);
+            }, 0) ?? 0;
+            return (
+            <Card key={meal.id} className="border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-9 items-center justify-center rounded-lg bg-green-500/10">
+                      <UtensilsCrossed className="size-4 text-green-600" />
+                    </div>
+                    <CardTitle className="text-base">{meal.name}</CardTitle>
+                  </div>
+                  <Badge variant="secondary" className="text-xs">
+                    {mealCalories} ккал
+                  </Badge>
+                </div>
+              </CardHeader>
+              {meal.items && meal.items.length > 0 && (
+                <CardContent className="pt-0">
+                  <div className="flex flex-col gap-2">
+                    {meal.items.map((item, idx) => {
+                      const qty = item.quantity_g;
+                      const food = item.food_item;
+                      const cal = Math.round((food.calories_per_100g * qty) / 100);
+                      const prot = Math.round((food.protein_per_100g * qty) / 100);
+                      const fat = Math.round((food.fat_per_100g * qty) / 100);
+                      const carbs = Math.round((food.carbs_per_100g * qty) / 100);
+                      return (
+                        <div key={item.id}>
+                          {idx > 0 && <Separator className="mb-2" />}
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium">{food.name_ru || food.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {qty} г | Б {prot}г | Ж {fat}г | У {carbs}г
+                              </p>
+                            </div>
+                            <span className="text-sm font-medium text-muted-foreground">
+                              {cal} ккал
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+            );
+          })}
+        </div>
+      ) : !activePlan && !summaryLoading ? (
+        <Card className="border-dashed border-border">
+          <CardContent className="flex flex-col items-center gap-3 py-8">
+            <Sparkles className="size-8 text-muted-foreground" />
+            <div className="text-center">
+              <p className="font-medium">Нет плана питания</p>
+              <p className="text-sm text-muted-foreground">
+                Создайте персональный план на основе ваших параметров
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setGenerateSheetOpen(true)}
+            >
+              <Sparkles className="size-4" />
+              Создать план
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* KBZHU Ring Charts */}
       <Card className="border-border/50">

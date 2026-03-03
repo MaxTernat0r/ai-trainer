@@ -31,6 +31,10 @@ export const nutritionApi = {
     return apiClient.get('nutrition/plans').json<NutritionPlan[]>();
   },
 
+  getPlan: async (planId: string): Promise<NutritionPlan> => {
+    return apiClient.get(`nutrition/plans/${planId}`).json<NutritionPlan>();
+  },
+
   generate: async (data: GenerateNutritionRequest): Promise<NutritionPlan> => {
     return apiClient.post('nutrition/generate', { json: data }).json<NutritionPlan>();
   },

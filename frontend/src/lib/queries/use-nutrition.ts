@@ -19,6 +19,14 @@ export function useNutritionPlans() {
   });
 }
 
+export function useNutritionPlan(planId: string | undefined) {
+  return useQuery<NutritionPlan>({
+    queryKey: [...queryKeys.nutrition.plans(), planId],
+    queryFn: () => nutritionApi.getPlan(planId!),
+    enabled: !!planId,
+  });
+}
+
 export function useGenerateNutrition() {
   const queryClient = useQueryClient();
 
