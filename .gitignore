@@ -18,8 +18,10 @@ out/
 
 # Environment
 .env
+.env.prod
 .env.local
 .env.*.local
+nginx/certs/
 
 # IDE
 .vscode/
