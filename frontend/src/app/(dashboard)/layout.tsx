@@ -1,7 +1,8 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import {
   Home,
@@ -19,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useUIStore } from '@/lib/stores/ui-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useProfile } from '@/lib/queries/use-profile';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -39,9 +41,17 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { theme, setTheme } = useTheme();
   const { sidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
   const user = useAuthStore((state) => state.user);
+  const { data: profile, isLoading: profileLoading } = useProfile();
+
+  useEffect(() => {
+    if (!profileLoading && profile && !profile.first_name) {
+      router.replace('/onboarding');
+    }
+  }, [profile, profileLoading, router]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
