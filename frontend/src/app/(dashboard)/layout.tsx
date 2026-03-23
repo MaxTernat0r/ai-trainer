@@ -49,7 +49,16 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (profileLoading) return;
-    if (!profile || !profile.first_name || !profile.goal || !profile.activity_level || !profile.gender) {
+    const p = profile;
+    const isComplete = p
+      && p.first_name && p.gender && p.date_of_birth && p.height_cm && p.weight_kg // шаг 0
+      && p.goal // шаг 1
+      && p.sport_type // шаг 2
+      && p.experience_level // шаг 3
+      && p.activity_level && p.training_days_per_week // шаг 4
+      // шаг 5 — медицинские ограничения (опционально)
+      && p.meals_per_day; // шаг 6
+    if (!isComplete) {
       router.replace('/onboarding');
     }
   }, [profile, profileLoading, router]);
