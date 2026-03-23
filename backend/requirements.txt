@@ -20,7 +20,7 @@ passlib[bcrypt]>=1.7,<1.8
 bcrypt>=4.2,<4.3
 
 # OAuth
-httpx>=0.28,<0.29
+httpx[socks]>=0.28,<0.29
 authlib>=1.4,<1.5
 
 # AI
