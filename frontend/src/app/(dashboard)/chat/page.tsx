@@ -50,6 +50,7 @@ export default function ChatPage() {
   const [inputValue, setInputValue] = useState('');
   const [activeConversationId, setActiveConversationId] = useState<string | undefined>(undefined);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Queries
@@ -70,21 +71,30 @@ export default function ChatPage() {
     }
   }, [conversations, activeConversationId]);
 
-  // Build messages array: real messages + streaming message
+  // Build messages array: real messages + pending user message + streaming/typing
   const messages: ChatMessage[] = (() => {
     const base = activeConversation?.messages ?? [];
-    if (isStreaming && streamMessage) {
-      return [
-        ...base,
-        {
-          id: '__streaming__',
-          role: 'assistant' as const,
-          content: streamMessage,
-          created_at: new Date().toISOString(),
-        },
-      ];
+    const result = [...base];
+
+    if (pendingUserMessage) {
+      result.push({
+        id: '__pending_user__',
+        role: 'user' as const,
+        content: pendingUserMessage,
+        created_at: new Date().toISOString(),
+      });
     }
-    return base;
+
+    if (isStreaming) {
+      result.push({
+        id: '__streaming__',
+        role: 'assistant' as const,
+        content: streamMessage || '',
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    return result;
   })();
 
   const scrollToBottom = useCallback(() => {
@@ -113,11 +123,14 @@ export default function ChatPage() {
     }
 
     setInputValue('');
+    setPendingUserMessage(text.trim());
 
     try {
       await sendStreamMessage(conversationId, text.trim());
     } catch {
       toast.error('Ошибка отправки сообщения');
+    } finally {
+      setPendingUserMessage(null);
     }
   };
 
@@ -344,17 +357,23 @@ export default function ChatPage() {
                     className={cn(
                       'max-w-[80%] rounded-2xl px-4 py-2.5',
                       message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
+                        ? 'bg-primary/15 text-foreground'
                         : 'bg-muted'
                     )}
                   >
                     <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
                       {message.role === 'user' ? (
                         <p className="whitespace-pre-wrap">{message.content}</p>
+                      ) : message.id === '__streaming__' && !message.content ? (
+                        <div className="flex items-center gap-1 py-1">
+                          <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.3s]" />
+                          <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.15s]" />
+                          <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60" />
+                        </div>
                       ) : (
                         <ReactMarkdown>{message.content}</ReactMarkdown>
                       )}
-                      {message.id === '__streaming__' && (
+                      {message.id === '__streaming__' && message.content && (
                         <span className="ml-1 inline-block size-2 animate-pulse rounded-full bg-current" />
                       )}
                     </div>
