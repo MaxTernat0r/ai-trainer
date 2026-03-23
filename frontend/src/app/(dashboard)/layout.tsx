@@ -48,7 +48,8 @@ export default function DashboardLayout({
   const { data: profile, isLoading: profileLoading } = useProfile();
 
   useEffect(() => {
-    if (!profileLoading && profile && !profile.first_name) {
+    if (profileLoading) return;
+    if (!profile || !profile.first_name || !profile.goal || !profile.activity_level || !profile.gender) {
       router.replace('/onboarding');
     }
   }, [profile, profileLoading, router]);
