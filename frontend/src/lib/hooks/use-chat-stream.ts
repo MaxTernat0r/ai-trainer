@@ -33,9 +33,9 @@ export function useChatStream(): UseChatStreamReturn {
       setIsStreaming(true);
 
       try {
-        const token = useAuthStore.getState().accessToken;
+        let token = useAuthStore.getState().accessToken;
 
-        const response = await fetch(
+        let response = await fetch(
           `${API_BASE_URL}/api/v1/chat/conversations/${conversationId}/messages`,
           {
             method: 'POST',
@@ -47,6 +47,30 @@ export function useChatStream(): UseChatStreamReturn {
             signal: controller.signal,
           }
         );
+
+        // Retry once after refreshing token
+        if (response.status === 401) {
+          try {
+            const refreshRes = await fetch('/api/auth/refresh', { method: 'POST' });
+            if (refreshRes.ok) {
+              const data = await refreshRes.json();
+              useAuthStore.getState().setAccessToken(data.accessToken);
+              token = data.accessToken;
+              response = await fetch(
+                `${API_BASE_URL}/api/v1/chat/conversations/${conversationId}/messages`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                  },
+                  body: JSON.stringify({ content }),
+                  signal: controller.signal,
+                }
+              );
+            }
+          } catch { /* refresh failed */ }
+        }
 
         if (!response.ok) {
           throw new Error(`Chat request failed: ${response.status}`);
