@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o"
     OPENAI_MINI_MODEL: str = "gpt-4o-mini"
+    OPENAI_PROXY_URL: str = ""
 
     # Rate Limiting
     REDIS_URL: str = "redis://localhost:6379"
