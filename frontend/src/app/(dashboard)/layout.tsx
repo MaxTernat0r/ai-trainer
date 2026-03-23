@@ -77,7 +77,7 @@ export default function DashboardLayout({
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-border bg-sidebar transition-all duration-300 md:relative md:z-0',
-          sidebarOpen ? 'w-64' : 'w-0 -translate-x-full border-r-0 md:w-16 md:translate-x-0 md:border-r'
+          sidebarOpen ? 'w-64' : 'hidden md:flex md:w-16'
         )}
       >
         {/* Sidebar header */}
