@@ -311,7 +311,7 @@ export default function AnalyticsPage() {
       {/* Tabs */}
       <Tabs defaultValue="weight" className="w-full">
         <div className="no-scrollbar -mx-1 overflow-x-auto px-1">
-          <TabsList className="inline-flex w-max min-w-full sm:w-auto sm:min-w-0">
+          <TabsList className="w-max min-w-full sm:w-auto sm:min-w-0">
             <TabsTrigger value="weight" className="gap-1.5">
               <Scale className="size-4" />
               Вес
