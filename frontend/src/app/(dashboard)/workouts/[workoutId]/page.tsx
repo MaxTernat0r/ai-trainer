@@ -259,7 +259,7 @@ function WorkoutSessionView({
         workout_exercise_id: exercise.id,
         set_number: set.setNumber,
         reps_completed: set.reps ? Number(set.reps) : null,
-        weight_kg: set.weight ? Number(set.weight) : null,
+        weight_kg: set.weight === '' ? 0 : Number(set.weight),
         duration_seconds: null,
         is_warmup: false,
         scheduled_workout_id: entryId,
@@ -473,7 +473,7 @@ function WorkoutSessionView({
                           <Button
                             size="sm"
                             onClick={() => completeSet(setIndex)}
-                            disabled={!set.reps || !set.weight || logSetMutation.isPending}
+                            disabled={!set.reps || Number(set.reps) < 1 || logSetMutation.isPending}
                           >
                             {logSetMutation.isPending ? (
                               <Loader2 className="size-4 animate-spin" />

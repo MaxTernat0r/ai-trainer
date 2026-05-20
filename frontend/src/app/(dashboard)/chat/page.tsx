@@ -185,7 +185,7 @@ export default function ChatPage() {
 
   const conversationsListContent = (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b border-[#712031]/55 p-4">
+      <div className="flex shrink-0 items-center justify-between border-b border-[#712031]/55 p-4 pr-12">
         <h2 className="font-semibold">Диалоги</h2>
         <Button
           variant="ghost"
