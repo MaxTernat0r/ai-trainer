@@ -6,6 +6,12 @@ class RegisterRequest(BaseModel):
     password: str
 
 
+class RegisterResponse(BaseModel):
+    detail: str
+    email: EmailStr
+    requires_verification: bool = True
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -28,6 +34,20 @@ class UserBrief(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str | None = None
+    email: EmailStr | None = None
+    code: str | None = None
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+
+class MessageResponse(BaseModel):
+    detail: str
 
 
 class OAuthCallbackRequest(BaseModel):

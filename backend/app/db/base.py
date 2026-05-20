@@ -1,6 +1,6 @@
 # Import all models here so Alembic can detect them
 from app.db.base_model import Base  # noqa: F401
-from app.models.user import User, OAuthAccount, RefreshToken  # noqa: F401
+from app.models.user import User, OAuthAccount, RefreshToken, EmailVerificationToken  # noqa: F401
 from app.models.profile import UserProfile, MedicalRestriction, UserMedicalRestriction  # noqa: F401
 from app.models.exercise import Exercise, MuscleGroup, Equipment, ExerciseMuscleGroup  # noqa: F401
 from app.models.workout import WorkoutPlan, WorkoutSession, WorkoutExercise, ExerciseSet  # noqa: F401

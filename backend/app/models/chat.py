@@ -18,7 +18,10 @@ class ChatConversation(BaseModel):
 
     user: Mapped["User"] = relationship(back_populates="chat_conversations")  # type: ignore[name-defined]  # noqa: F821
     messages: Mapped[list["ChatMessage"]] = relationship(
-        back_populates="conversation", lazy="selectin", order_by="ChatMessage.created_at"
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="ChatMessage.created_at",
     )
 
 

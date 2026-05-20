@@ -21,6 +21,11 @@ class ForbiddenError(AppException):
         super().__init__(403, detail, "FORBIDDEN")
 
 
+class EmailNotVerifiedError(AppException):
+    def __init__(self) -> None:
+        super().__init__(403, "Email is not verified", "EMAIL_NOT_VERIFIED")
+
+
 class BadRequestError(AppException):
     def __init__(self, detail: str = "Bad request") -> None:
         super().__init__(400, detail, "BAD_REQUEST")
@@ -34,6 +39,11 @@ class UnauthorizedError(AppException):
 class AIServiceError(AppException):
     def __init__(self, detail: str = "AI service temporarily unavailable") -> None:
         super().__init__(503, detail, "AI_SERVICE_ERROR")
+
+
+class EmailServiceError(AppException):
+    def __init__(self, detail: str = "Email service temporarily unavailable") -> None:
+        super().__init__(503, detail, "EMAIL_SERVICE_ERROR")
 
 
 class RateLimitError(AppException):

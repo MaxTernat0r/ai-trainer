@@ -37,3 +37,20 @@ def generate_refresh_token() -> str:
 
 def hash_refresh_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def generate_email_verification_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def hash_email_verification_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def generate_email_verification_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def hash_email_verification_code(user_id: str, code: str) -> str:
+    normalized_code = "".join(char for char in code if char.isdigit())
+    return hashlib.sha256(f"{user_id}:{normalized_code}".encode()).hexdigest()

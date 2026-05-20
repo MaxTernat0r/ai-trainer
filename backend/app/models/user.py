@@ -21,6 +21,10 @@ class User(BaseModel):
     profile: Mapped["UserProfile"] = relationship(back_populates="user", uselist=False, lazy="selectin")  # type: ignore[name-defined]  # noqa: F821
     oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(back_populates="user", lazy="selectin")
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="user")
+    email_verification_tokens: Mapped[list["EmailVerificationToken"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     workout_plans: Mapped[list["WorkoutPlan"]] = relationship(back_populates="user")  # type: ignore[name-defined]  # noqa: F821
     nutrition_plans: Mapped[list["NutritionPlan"]] = relationship(back_populates="user")  # type: ignore[name-defined]  # noqa: F821
     chat_conversations: Mapped[list["ChatConversation"]] = relationship(back_populates="user")  # type: ignore[name-defined]  # noqa: F821
@@ -55,3 +59,16 @@ class RefreshToken(BaseModel):
     device_info: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="refresh_tokens")
+
+
+class EmailVerificationToken(BaseModel):
+    __tablename__ = "email_verification_tokens"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped["User"] = relationship(back_populates="email_verification_tokens")

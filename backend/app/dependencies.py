@@ -6,6 +6,8 @@ from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import EmailNotVerifiedError
+from app.core.config import settings
 from app.core.security import verify_access_token
 from app.db.session import get_async_session
 from app.models.user import User
@@ -35,5 +37,8 @@ async def get_current_user(
 
     if user is None or not user.is_active:
         raise credentials_exception
+
+    if settings.EMAIL_VERIFICATION_REQUIRED and not user.is_verified:
+        raise EmailNotVerifiedError()
 
     return user
