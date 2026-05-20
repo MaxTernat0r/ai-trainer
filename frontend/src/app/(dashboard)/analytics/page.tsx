@@ -310,28 +310,30 @@ export default function AnalyticsPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="weight" className="w-full">
-        <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="weight" className="gap-1.5">
-            <Scale className="size-4" />
-            Вес
-          </TabsTrigger>
-          <TabsTrigger value="measurements" className="gap-1.5">
-            <Ruler className="size-4" />
-            Замеры
-          </TabsTrigger>
-          <TabsTrigger value="workouts" className="gap-1.5">
-            <Dumbbell className="size-4" />
-            Тренировки
-          </TabsTrigger>
-          <TabsTrigger value="history" className="gap-1.5">
-            <History className="size-4" />
-            История
-          </TabsTrigger>
-          <TabsTrigger value="nutrition" className="gap-1.5">
-            <UtensilsCrossed className="size-4" />
-            Питание
-          </TabsTrigger>
-        </TabsList>
+        <div className="no-scrollbar -mx-1 overflow-x-auto px-1">
+          <TabsList className="inline-flex w-max min-w-full sm:w-auto sm:min-w-0">
+            <TabsTrigger value="weight" className="gap-1.5">
+              <Scale className="size-4" />
+              Вес
+            </TabsTrigger>
+            <TabsTrigger value="measurements" className="gap-1.5">
+              <Ruler className="size-4" />
+              Замеры
+            </TabsTrigger>
+            <TabsTrigger value="workouts" className="gap-1.5">
+              <Dumbbell className="size-4" />
+              Тренировки
+            </TabsTrigger>
+            <TabsTrigger value="history" className="gap-1.5">
+              <History className="size-4" />
+              История
+            </TabsTrigger>
+            <TabsTrigger value="nutrition" className="gap-1.5">
+              <UtensilsCrossed className="size-4" />
+              Питание
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Weight tab */}
         <TabsContent value="weight" className="mt-6">
