@@ -559,7 +559,7 @@ export default function WorkoutsPage() {
                   return (
                     <div
                       key={idx}
-                      className={`relative min-h-[72px] rounded-md border p-1 text-xs ${
+                      className={`relative min-h-[72px] min-w-0 rounded-md border p-1 text-xs ${
                         cell.date === 0
                           ? 'border-transparent'
                           : isToday
@@ -595,7 +595,7 @@ export default function WorkoutsPage() {
                                 }`}
                               >
                                 <button
-                                  className="shrink-0 rounded p-0.5 transition-colors hover:bg-muted/50"
+                                  className="hidden shrink-0 rounded p-0.5 transition-colors hover:bg-muted/50 sm:inline-flex"
                                   title={entry.is_completed ? 'Отметить как невыполненную' : 'Отметить как выполненную'}
                                   onClick={(e) => {
                                     e.stopPropagation();
