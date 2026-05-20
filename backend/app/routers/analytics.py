@@ -10,6 +10,7 @@ from app.db.session import get_async_session
 from app.dependencies import get_current_user
 from app.models.analytics import MeasurementLog, WeightLog
 from app.models.nutrition import NutritionLog
+from app.models.profile import UserProfile
 from app.models.exercise import Exercise
 from app.models.workout import ExerciseSet, ScheduledWorkout, WorkoutExercise, WorkoutPlan, WorkoutSession
 from app.models.user import User
@@ -28,6 +29,14 @@ from app.schemas.analytics import (
 )
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+
+def _resolve_current_weight(latest_weight: WeightLog | None, profile: UserProfile | None) -> float | None:
+    if latest_weight is not None:
+        return latest_weight.weight_kg
+    if profile is not None:
+        return profile.weight_kg
+    return None
 
 
 def _parse_optional_date(value: str | None) -> date:
@@ -140,6 +149,11 @@ async def get_dashboard(
     )
     latest_weight = weight_result.scalar_one_or_none()
 
+    profile_result = await db.execute(
+        select(UserProfile).where(UserProfile.user_id == user.id)
+    )
+    profile = profile_result.scalar_one_or_none()
+
     # Weight 30 days ago (closest entry before that date)
     weight_change_30d = None
     if latest_weight:
@@ -214,7 +228,7 @@ async def get_dashboard(
             break
 
     return DashboardData(
-        current_weight=latest_weight.weight_kg if latest_weight else None,
+        current_weight=_resolve_current_weight(latest_weight, profile),
         weight_change_30d=weight_change_30d,
         workouts_this_week=workouts_week,
         calories_today=float(cal_today),

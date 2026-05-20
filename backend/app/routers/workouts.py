@@ -34,8 +34,6 @@ async def generate_workout(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    # AI generation will be implemented in Phase 7
-    # For now, return a placeholder
     from app.services.ai.workout_generator import generate_workout_plan
 
     plan = await generate_workout_plan(user, data, db)

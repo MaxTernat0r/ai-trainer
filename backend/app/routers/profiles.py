@@ -14,14 +14,31 @@ from app.schemas.profile import MedicalRestrictionRead, ProfileRead, ProfileUpda
 router = APIRouter(prefix="/profiles", tags=["profiles"])
 
 
-def _profile_to_read(profile: UserProfile) -> ProfileRead:
-    restrictions = []
-    for umr in profile.medical_restrictions:
-        r = umr.restriction
-        restrictions.append(
-            MedicalRestrictionRead(id=str(r.id), name=r.name, description=r.description)
+async def _read_profile_restrictions(
+    db: AsyncSession, profile_id
+) -> list[MedicalRestrictionRead]:
+    result = await db.execute(
+        select(MedicalRestriction)
+        .join(
+            UserMedicalRestriction,
+            UserMedicalRestriction.medical_restriction_id == MedicalRestriction.id,
         )
+        .where(UserMedicalRestriction.user_profile_id == profile_id)
+        .order_by(MedicalRestriction.name)
+    )
+    return [
+        MedicalRestrictionRead(
+            id=str(restriction.id),
+            name=restriction.name,
+            description=restriction.description,
+        )
+        for restriction in result.scalars()
+    ]
 
+
+def _profile_to_read(
+    profile: UserProfile, restrictions: list[MedicalRestrictionRead]
+) -> ProfileRead:
     return ProfileRead(
         id=str(profile.id),
         first_name=profile.first_name,
@@ -56,7 +73,8 @@ async def get_profile(
     profile = result.scalar_one_or_none()
     if not profile:
         raise NotFoundError("Profile")
-    return _profile_to_read(profile)
+    restrictions = await _read_profile_restrictions(db, profile.id)
+    return _profile_to_read(profile, restrictions)
 
 
 @router.put("/me", response_model=ProfileRead)
@@ -103,8 +121,8 @@ async def create_or_update_profile(
             db.add(umr)
 
     await db.flush()
-    await db.refresh(profile)
-    return _profile_to_read(profile)
+    restrictions = await _read_profile_restrictions(db, profile.id)
+    return _profile_to_read(profile, restrictions)
 
 
 @router.get("/medical-restrictions", response_model=list[MedicalRestrictionRead])

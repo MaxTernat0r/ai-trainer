@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 import app.db.base  # noqa: F401 — ensure all models are registered for relationships
 
@@ -19,6 +20,7 @@ from app.schemas.chat import (
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/conversations", response_model=ConversationRead)
@@ -142,9 +144,18 @@ async def send_message(
 
     async def event_stream():
         full_response = ""
-        async for chunk in generate_chat_response(user, conv, data.content, db):
-            full_response += chunk
-            yield f"data: {chunk}\n\n"
+        try:
+            async for chunk in generate_chat_response(user, conv, data.content, db):
+                full_response += chunk
+                yield f"data: {chunk}\n\n"
+        except Exception:
+            logger.exception("Failed to stream chat response")
+            fallback = (
+                "Сейчас не получилось получить ответ от ИИ-сервиса, но я сохранил "
+                "сообщение. Попробуйте повторить запрос чуть позже."
+            )
+            full_response = full_response or fallback
+            yield f"data: {fallback}\n\n"
 
         # Save assistant message
         assistant_msg = ChatMessage(
