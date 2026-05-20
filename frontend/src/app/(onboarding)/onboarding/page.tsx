@@ -240,7 +240,7 @@ export default function OnboardingPage() {
             style={{ width: `${((step + 1) / TOTAL_STEPS) * 100}%` }}
           />
         </div>
-        <div className="flex justify-between">
+        <div className="hidden justify-between sm:flex">
           {stepInfo.map((s, i) => (
             <div
               key={s.title}
