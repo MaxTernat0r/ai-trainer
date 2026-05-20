@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-export const TEST_EMAIL = 'mobile-test@coach-ai.local';
+export const TEST_EMAIL = 'mobile-test@example.com';
 export const TEST_PASSWORD = 'mobile-test-pass-123';
 
 export async function loginAsTestUser(page: Page): Promise<void> {

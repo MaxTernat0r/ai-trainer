@@ -3,7 +3,7 @@
 Запуск из backend/:
     python -m scripts.seed_test_user
 
-Создаёт пользователя mobile-test@coach-ai.local с паролем mobile-test-pass-123,
+Создаёт пользователя mobile-test@example.com с паролем mobile-test-pass-123,
 ставит is_verified=True, заполняет профиль для прохождения onboarding gate.
 
 Идемпотентен.
@@ -19,7 +19,7 @@ from app.db.session import async_session_factory
 from app.models.profile import UserProfile
 from app.models.user import User
 
-TEST_EMAIL = "mobile-test@coach-ai.local"
+TEST_EMAIL = "mobile-test@example.com"
 TEST_PASSWORD = "mobile-test-pass-123"
 
 
