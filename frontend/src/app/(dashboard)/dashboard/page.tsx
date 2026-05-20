@@ -35,7 +35,7 @@ import { useWorkoutPlans } from '@/lib/queries/use-workouts';
 
 function StatSkeleton() {
   return (
-    <Card className="panel-reveal min-h-[148px]">
+    <Card className="panel-reveal min-h-[120px] sm:min-h-[148px]">
       <CardContent className="flex h-full flex-col justify-between">
         <Skeleton className="size-10 rounded-lg" />
         <div className="flex flex-col gap-2">
@@ -157,7 +157,7 @@ export default function DashboardPage() {
                 {activePlan ? 'program active' : 'setup mode'}
               </Badge>
             </div>
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h1 className="text-2xl font-semibold sm:text-3xl tracking-tight sm:text-4xl">
               Центр управления тренировками
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
@@ -322,7 +322,7 @@ export default function DashboardPage() {
           : stats.map((stat, index) => (
               <Card
                 key={stat.title}
-                className="panel-reveal min-h-[148px]"
+                className="panel-reveal min-h-[120px] sm:min-h-[148px]"
                 style={{ animationDelay: `${120 + index * 55}ms` }}
               >
                 <CardContent className="flex h-full flex-col justify-between">
@@ -336,7 +336,7 @@ export default function DashboardPage() {
                     <p className="tactical-readout text-[0.66rem] text-muted-foreground">
                       {stat.title}
                     </p>
-                    <p className="mt-2 text-3xl font-semibold">
+                    <p className="mt-2 text-2xl font-semibold sm:text-3xl">
                       {stat.value}
                       {stat.suffix && (
                         <span className="ml-1 text-sm font-normal text-muted-foreground">
