@@ -1,8 +1,8 @@
-"""Chat engine using OpenAI API with streaming.
+"""Chat engine using configured AI provider with streaming.
 
-Provides an async generator that yields response chunks from the OpenAI
-streaming API. Maintains conversation context by loading recent messages
-and the user's profile information.
+Provides an async generator that yields response chunks from the configured
+AI provider. Maintains conversation context by loading recent messages and
+the user's profile information.
 """
 
 import logging
@@ -11,12 +11,11 @@ from collections.abc import AsyncGenerator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.exceptions import AIServiceError
 from app.models.chat import ChatConversation, ChatMessage
 from app.models.user import User
 from app.services.ai.context_builder import build_user_context
-from app.services.ai.openai_client import get_openai_client
+from app.services.ai.provider import get_configured_ai_provider, stream_chat_completion
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +26,31 @@ CHAT_SYSTEM_PROMPT = """\
 """
 
 MAX_HISTORY_MESSAGES = 20
+
+
+def _build_fallback_chat_response(message: str) -> str:
+    message_lower = message.lower()
+    if any(word in message_lower for word in ["пит", "еда", "калор", "бжу"]):
+        return (
+            "Давай держать питание простым: в каждом основном приёме пищи "
+            "собери источник белка, сложные углеводы и овощи. Для твоей цели "
+            "лучше заранее планировать 3-4 приёма пищи, добирать белок в течение "
+            "дня и не менять рацион резко. Если есть аллергии или продукты, которые "
+            "ты не любишь, исключай их сразу и выбирай близкие аналоги."
+        )
+    if any(word in message_lower for word in ["техник", "упраж", "жим", "присед", "тяга"]):
+        return (
+            "По технике ориентируйся на три правила: стабильный корпус, контролируемая "
+            "амплитуда и отсутствие боли. Начинай с разминочных подходов, снимай первое "
+            "рабочее движение на видео сбоку и не увеличивай вес, пока движение не выглядит "
+            "одинаково от первого до последнего повтора."
+        )
+    return (
+        "Составь тренировку вокруг базовой схемы: разминка 7-10 минут, затем 4-6 упражнений "
+        "по 3 подхода. Для набора мышц держи диапазон 8-12 повторений, отдых 60-120 секунд "
+        "и добавляй нагрузку постепенно. Если есть ограничения по здоровью, выбирай варианты "
+        "без боли и оставляй 1-2 повтора в запасе."
+    )
 
 
 async def _load_conversation_history(
@@ -89,19 +113,17 @@ async def generate_chat_response(
         messages.extend(history)
         messages.append({"role": "user", "content": message})
 
-        # Call OpenAI API with streaming
-        client = get_openai_client()
-        stream = await client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
+        if not get_configured_ai_provider():
+            logger.warning("AI provider is not configured; using fallback chat response")
+            yield _build_fallback_chat_response(message)
+            return
+
+        async for content in stream_chat_completion(
             messages=messages,
             temperature=0.7,
             max_tokens=1024,
-            stream=True,
-        )
-
-        async for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+        ):
+            yield content
 
     except AIServiceError:
         raise

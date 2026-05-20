@@ -1,8 +1,8 @@
-"""Nutrition plan generation using OpenAI API.
+"""Nutrition plan generation using the configured AI provider.
 
 Generates structured meal plans based on user profile, caloric needs,
 macro targets, and dietary preferences. Uses calorie_calculator for
-TDEE/macro computation and OpenAI for meal plan generation.
+TDEE/macro computation.
 """
 
 import json
@@ -12,7 +12,6 @@ from datetime import date
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.exceptions import AIServiceError
 from app.models.nutrition import FoodItem, Meal, MealItem, NutritionPlan
 from app.models.profile import UserProfile
@@ -24,7 +23,7 @@ from app.services.ai.calorie_calculator import (
     calculate_tdee,
 )
 from app.services.ai.context_builder import build_user_context
-from app.services.ai.openai_client import get_openai_client
+from app.services.ai.provider import generate_json_completion, get_configured_ai_provider
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +42,10 @@ NUTRITION_SYSTEM_PROMPT = """\
 6. Указывай количество каждого продукта в граммах.
 7. Для каждого продукта указывай точное содержание калорий и БЖУ на 100г.
 8. Распределяй калории между приёмами пищи равномерно.
+9. Ровно столько meals, сколько запрошено приёмов пищи в день.
+10. В каждом приёме пищи должно быть не больше 4 продуктов.
+11. Пиши короткие заметки: одна короткая фраза на продукт или null.
+12. Возвращай компактный JSON без лишних пробелов и переносов, если это возможно.
 
 Ответь СТРОГО валидным JSON без какого-либо дополнительного текста. Структура:
 {
@@ -142,12 +145,158 @@ async def _find_or_create_food_item(
     return food_item
 
 
+async def _load_food_catalog(db: AsyncSession) -> list[dict]:
+    result = await db.execute(select(FoodItem).order_by(FoodItem.name_ru))
+    return [
+        {
+            "food_name": food.name_ru,
+            "food_name_en": food.name,
+            "calories_per_100g": food.calories_per_100g,
+            "protein_per_100g": food.protein_per_100g,
+            "fat_per_100g": food.fat_per_100g,
+            "carbs_per_100g": food.carbs_per_100g,
+            "category": food.category,
+        }
+        for food in result.scalars()
+    ]
+
+
+def _is_allowed_food(food: dict, profile: UserProfile) -> bool:
+    haystack = " ".join(
+        [
+            food.get("food_name", ""),
+            food.get("food_name_en", ""),
+            food.get("category", "") or "",
+        ]
+    ).lower()
+    allergies = (profile.food_allergies or "").lower()
+    disliked = (profile.disliked_foods or "").lower()
+
+    if "лактоз" in allergies and food.get("category") in {"dairy", "supplements"}:
+        return False
+    if "орех" in allergies and food.get("category") == "nuts":
+        return False
+
+    blocked_terms = [term.strip() for term in [*allergies.split(","), *disliked.split(",")]]
+    return not any(term and term in haystack for term in blocked_terms)
+
+
+def _pick_food(catalog: list[dict], keywords: list[str], profile: UserProfile) -> dict:
+    allowed = [food for food in catalog if _is_allowed_food(food, profile)]
+    for keyword in keywords:
+        keyword_lower = keyword.lower()
+        match = next(
+            (
+                food
+                for food in allowed
+                if keyword_lower in food.get("food_name", "").lower()
+                or keyword_lower in food.get("food_name_en", "").lower()
+            ),
+            None,
+        )
+        if match:
+            return match
+
+    if allowed:
+        return allowed[0]
+    return catalog[0]
+
+
+def _meal_item(food: dict, quantity_g: int, notes: str | None = None) -> dict:
+    return {
+        **food,
+        "quantity_g": quantity_g,
+        "notes": notes,
+    }
+
+
+def _build_fallback_nutrition_plan_data(
+    profile: UserProfile,
+    meals_per_day: int,
+    macros: dict,
+    catalog: list[dict],
+) -> dict:
+    """Build a deterministic meal plan when OpenAI is not configured."""
+    templates = [
+        {
+            "name": "Завтрак",
+            "items": [
+                (["овсяная каша", "овсянка"], 250),
+                (["яичный белок", "яйцо"], 120),
+                (["банан", "яблоко"], 120),
+            ],
+        },
+        {
+            "name": "Обед",
+            "items": [
+                (["куриная грудка", "грудка индейки", "тофу"], 180),
+                (["гречка", "бурый рис", "киноа"], 220),
+                (["брокколи", "шпинат", "салат"], 150),
+            ],
+        },
+        {
+            "name": "Перекус",
+            "items": [
+                (["яблоко", "груша", "киви"], 180),
+                (["хумус", "рисовые хлебцы", "миндаль"], 80),
+            ],
+        },
+        {
+            "name": "Ужин",
+            "items": [
+                (["треска", "тунец", "лосось", "темпе"], 180),
+                (["картофель", "батат", "рис"], 220),
+                (["огурец", "помидор", "перец"], 180),
+            ],
+        },
+        {
+            "name": "Полдник",
+            "items": [
+                (["тофу", "чечевица", "нут"], 140),
+                (["цельнозерновой хлеб", "рисовые хлебцы"], 70),
+            ],
+        },
+        {
+            "name": "Второй ужин",
+            "items": [
+                (["соевое молоко", "кефир", "творог"], 250),
+                (["клубника", "голубика", "малина"], 120),
+            ],
+        },
+    ]
+
+    meal_count = max(2, min(meals_per_day, len(templates)))
+    calories_per_meal = round(macros["target_kcal"] / meal_count)
+    meals = []
+    for meal_idx, template in enumerate(templates[:meal_count]):
+        meals.append(
+            {
+                "name": template["name"],
+                "target_calories": calories_per_meal,
+                "items": [
+                    _meal_item(
+                        _pick_food(catalog, keywords, profile),
+                        quantity_g,
+                        "Резервный план без обращения к OpenAI.",
+                    )
+                    for keywords, quantity_g in template["items"]
+                ],
+            }
+        )
+
+    return {
+        "title": "Базовый план питания",
+        "is_ai_generated": False,
+        "meals": meals,
+    }
+
+
 async def generate_nutrition_plan(
     user: User,
     request: GenerateNutritionRequest,
     db: AsyncSession,
 ) -> NutritionPlanRead:
-    """Generate a complete nutrition plan using OpenAI API.
+    """Generate a complete nutrition plan using the configured AI provider.
 
     Calculates the user's TDEE and macro targets, builds context,
     calls the AI model, parses the response, saves to database,
@@ -189,31 +338,34 @@ async def generate_nutrition_plan(
 - Жиры: {macros['fat_g']} г/день
 - Углеводы: {macros['carbs_g']} г/день
 - TDEE (поддержание): {macros['tdee']} ккал/день{dietary_notes}
+
+Сгенерируй ровно {meals_per_day} meals. В каждом meal используй 2-4 продукта максимум.
 """
 
-        # Call OpenAI API
-        client = get_openai_client()
-        response = await client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": NUTRITION_SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.7,
-            max_tokens=4096,
-        )
+        if get_configured_ai_provider():
+            raw_content = await generate_json_completion(
+                NUTRITION_SYSTEM_PROMPT,
+                user_message,
+                temperature=0.3,
+                max_tokens=8192,
+            )
 
-        raw_content = response.choices[0].message.content
-        if not raw_content:
-            raise AIServiceError("AI returned an empty response")
-
-        # Parse the JSON response
-        try:
-            plan_data = json.loads(raw_content)
-        except json.JSONDecodeError as e:
-            logger.error("Failed to parse AI nutrition response: %s", e)
-            raise AIServiceError("Failed to parse AI response into a valid nutrition plan")
+            # Parse the JSON response
+            try:
+                plan_data = json.loads(raw_content)
+            except json.JSONDecodeError as e:
+                logger.error("Failed to parse AI nutrition response: %s", e)
+                raise AIServiceError("Failed to parse AI response into a valid nutrition plan")
+        else:
+            logger.warning("AI provider is not configured; using fallback nutrition plan")
+            catalog = await _load_food_catalog(db)
+            if not catalog:
+                raise AIServiceError(
+                    "No foods found in the database. Please seed the food catalog first."
+                )
+            plan_data = _build_fallback_nutrition_plan_data(
+                profile, meals_per_day, macros, catalog
+            )
 
         # Validate required fields
         if "meals" not in plan_data or not plan_data["meals"]:
@@ -234,7 +386,7 @@ async def generate_nutrition_plan(
             daily_protein_g=macros["protein_g"],
             daily_fat_g=macros["fat_g"],
             daily_carbs_g=macros["carbs_g"],
-            is_ai_generated=True,
+            is_ai_generated=plan_data.get("is_ai_generated", True),
             is_active=True,
             ai_prompt_snapshot=user_message[:2000],
         )
