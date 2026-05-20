@@ -242,8 +242,8 @@ export default function DashboardLayout({
         <main
           ref={contentRef}
           className={cn(
-            'no-scrollbar flex-1 overscroll-contain',
-            isChatPage ? 'overflow-hidden' : 'overflow-y-auto'
+            'no-scrollbar flex-1 overflow-x-hidden overscroll-contain',
+            isChatPage ? 'overflow-y-hidden' : 'overflow-y-auto'
           )}
         >
           <div

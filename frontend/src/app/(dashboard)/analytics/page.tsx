@@ -299,7 +299,7 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className="flex min-w-0 flex-col gap-4 sm:gap-6">
+    <div className="flex min-w-0 flex-col gap-4 overflow-x-hidden sm:gap-6">
       {/* Header */}
       <div>
         <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Аналитика</h1>
@@ -310,26 +310,26 @@ export default function AnalyticsPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="weight" className="w-full min-w-0">
-        <div className="no-scrollbar -mx-1 overflow-x-auto px-1">
-          <TabsList className="w-max min-w-full sm:w-auto sm:min-w-0">
-            <TabsTrigger value="weight" className="gap-1.5">
-              <Scale className="size-4" />
+        <div className="no-scrollbar overflow-x-auto">
+          <TabsList className="w-max min-w-full gap-0.5 px-1 sm:w-auto sm:min-w-0 sm:gap-1 sm:px-1.5">
+            <TabsTrigger value="weight" className="gap-1 px-2 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
+              <Scale className="hidden size-4 sm:inline" />
               Вес
             </TabsTrigger>
-            <TabsTrigger value="measurements" className="gap-1.5">
-              <Ruler className="size-4" />
+            <TabsTrigger value="measurements" className="gap-1 px-2 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
+              <Ruler className="hidden size-4 sm:inline" />
               Замеры
             </TabsTrigger>
-            <TabsTrigger value="workouts" className="gap-1.5">
-              <Dumbbell className="size-4" />
+            <TabsTrigger value="workouts" className="gap-1 px-2 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
+              <Dumbbell className="hidden size-4 sm:inline" />
               Тренировки
             </TabsTrigger>
-            <TabsTrigger value="history" className="gap-1.5">
-              <History className="size-4" />
+            <TabsTrigger value="history" className="gap-1 px-2 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
+              <History className="hidden size-4 sm:inline" />
               История
             </TabsTrigger>
-            <TabsTrigger value="nutrition" className="gap-1.5">
-              <UtensilsCrossed className="size-4" />
+            <TabsTrigger value="nutrition" className="gap-1 px-2 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
+              <UtensilsCrossed className="hidden size-4 sm:inline" />
               Питание
             </TabsTrigger>
           </TabsList>
@@ -455,7 +455,7 @@ export default function AnalyticsPage() {
                       Изменение вашего веса по повторным замерам
                     </CardDescription>
                   </div>
-                  <div className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto px-1">
+                  <div className="no-scrollbar flex gap-1 overflow-x-auto">
                     {([['week', 'Неделя'], ['month', 'Месяц'], ['year', 'Год'], ['all', 'Всё']] as const).map(([val, label]) => (
                       <Button
                         key={val}
@@ -480,7 +480,7 @@ export default function AnalyticsPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="-mx-3 h-56 sm:mx-0 sm:h-72">
+                  <div className="h-56 w-full sm:h-72">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart
                         data={chartData}
@@ -636,7 +636,7 @@ export default function AnalyticsPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="-mx-3 h-56 sm:mx-0 sm:h-72">
+                  <div className="h-56 w-full sm:h-72">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart
                         data={measurementChartData}
@@ -784,7 +784,7 @@ export default function AnalyticsPage() {
                           </p>
                         </div>
                       ) : (
-                        <div className="-mx-3 h-56 sm:mx-0 sm:h-72">
+                        <div className="h-56 w-full sm:h-72">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart
                               data={progressChartData}
@@ -850,7 +850,7 @@ export default function AnalyticsPage() {
                           </p>
                         </div>
                       ) : (
-                        <div className="-mx-3 h-56 sm:mx-0 sm:h-72">
+                        <div className="h-56 w-full sm:h-72">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart
                               data={progressChartData}
@@ -1006,7 +1006,7 @@ export default function AnalyticsPage() {
                         </p>
                       </div>
                     ) : (
-                      <div className="-mx-3 h-52 sm:mx-0 sm:h-64">
+                      <div className="h-52 w-full sm:h-64">
                         <ResponsiveContainer width="100%" height="100%">
                           <LineChart
                             data={historySetsChartData}
