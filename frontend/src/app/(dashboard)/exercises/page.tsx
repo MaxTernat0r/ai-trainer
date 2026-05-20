@@ -98,9 +98,9 @@ export default function ExercisesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
         <Select value={difficulty} onValueChange={setDifficulty}>
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger className="w-full min-w-[8rem] flex-1 sm:w-[160px] sm:flex-none">
             <SelectValue placeholder="Сложность" />
           </SelectTrigger>
           <SelectContent>
@@ -112,7 +112,7 @@ export default function ExercisesPage() {
         </Select>
 
         <Select value={exerciseType} onValueChange={setExerciseType}>
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger className="w-full min-w-[8rem] flex-1 sm:w-[160px] sm:flex-none">
             <SelectValue placeholder="Тип" />
           </SelectTrigger>
           <SelectContent>
@@ -124,7 +124,7 @@ export default function ExercisesPage() {
         </Select>
 
         <Select value={muscleGroupId} onValueChange={setMuscleGroupId}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-full min-w-[8rem] flex-1 sm:w-[180px] sm:flex-none">
             <SelectValue placeholder="Группа мышц" />
           </SelectTrigger>
           <SelectContent>
@@ -138,7 +138,7 @@ export default function ExercisesPage() {
         </Select>
 
         <Select value={equipmentId} onValueChange={setEquipmentId}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-full min-w-[8rem] flex-1 sm:w-[180px] sm:flex-none">
             <SelectValue placeholder="Оборудование" />
           </SelectTrigger>
           <SelectContent>
@@ -155,6 +155,7 @@ export default function ExercisesPage() {
           <Button
             variant="ghost"
             size="sm"
+            className="col-span-2 sm:col-span-1"
             onClick={() => {
               setDifficulty('all');
               setExerciseType('all');
