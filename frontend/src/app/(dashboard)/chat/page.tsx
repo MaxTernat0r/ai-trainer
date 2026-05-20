@@ -14,12 +14,20 @@ import {
   PanelLeftClose,
   PanelLeft,
   Loader2,
+  Menu,
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import {
   useConversations,
@@ -49,6 +57,7 @@ export default function ChatPage() {
   const [inputValue, setInputValue] = useState('');
   const [activeConversationId, setActiveConversationId] = useState<string | undefined>(undefined);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -174,13 +183,107 @@ export default function ChatPage() {
 
   const hasMessages = messages.length > 0;
 
+  const conversationsListContent = (
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center justify-between border-b border-[#712031]/55 p-4">
+        <h2 className="font-semibold">Диалоги</h2>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => {
+            handleNewConversation();
+            setMobileSidebarOpen(false);
+          }}
+          disabled={createConversation.isPending}
+        >
+          {createConversation.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Plus className="size-4" />
+          )}
+        </Button>
+      </div>
+      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="flex flex-col gap-2">
+          {conversationsLoading ? (
+            <>
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="glass-lane flex items-center gap-3 rounded-lg px-3 py-2.5">
+                  <Skeleton className="size-4 shrink-0 rounded" />
+                  <div className="min-w-0 flex-1">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="mt-1 h-3 w-20" />
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : conversations && conversations.length > 0 ? (
+            conversations.map((conv) => (
+              <div
+                key={conv.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setActiveConversationId(conv.id);
+                  setMobileSidebarOpen(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setActiveConversationId(conv.id);
+                    setMobileSidebarOpen(false);
+                  }
+                }}
+                className={cn(
+                  'group glass-lane flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-all duration-200',
+                  activeConversationId === conv.id
+                    ? 'border-primary/45 bg-primary/12 shadow-[inset_0_1px_0_rgb(255_255_255_/_8%),0_0_20px_rgb(255_0_48_/_10%)]'
+                    : 'border-[#712031]/30 hover:border-primary/35 hover:bg-white/[0.055]'
+                )}
+              >
+                <MessageSquare
+                  className={cn(
+                    'size-4 shrink-0',
+                    activeConversationId === conv.id
+                      ? 'text-primary'
+                      : 'text-muted-foreground'
+                  )}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">
+                    {conv.title ?? 'Новый диалог'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(conv.created_at).toLocaleDateString('ru-RU')}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="shrink-0 opacity-60 transition-opacity hover:opacity-100"
+                  onClick={(e) => handleDeleteConversation(conv.id, e)}
+                >
+                  <Trash2 className="size-3 text-muted-foreground" />
+                </Button>
+              </div>
+            ))
+          ) : (
+            <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+              Нет диалогов. Создайте новый!
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="cockpit-panel flex h-full min-h-0 overflow-hidden rounded-lg">
       {/* Sidebar - conversations list */}
       <aside
         className={cn(
-          'min-h-0 flex-col border-r border-[#712031]/55 bg-black/[0.18] transition-all duration-300',
-          sidebarVisible ? 'hidden w-80 md:flex' : 'hidden'
+          'hidden min-h-0 flex-col border-r border-[#712031]/55 bg-black/[0.18] transition-all duration-300',
+          sidebarVisible ? 'md:flex md:w-80' : 'md:hidden'
         )}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-[#712031]/55 p-4">
@@ -280,10 +383,25 @@ export default function ChatPage() {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Chat header */}
         <div className="flex shrink-0 items-center gap-3 border-b border-[#712031]/55 px-4 py-3">
+          <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon-xs" className="md:hidden">
+                <Menu className="size-4" />
+                <span className="sr-only">Открыть список диалогов</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-80 max-w-[85vw] p-0">
+              <SheetHeader className="sr-only">
+                <SheetTitle>Диалоги</SheetTitle>
+              </SheetHeader>
+              {conversationsListContent}
+            </SheetContent>
+          </Sheet>
           {!sidebarVisible && (
             <Button
               variant="ghost"
               size="icon-xs"
+              className="hidden md:inline-flex"
               onClick={() => setSidebarVisible(true)}
             >
               <PanelLeft className="size-4" />
