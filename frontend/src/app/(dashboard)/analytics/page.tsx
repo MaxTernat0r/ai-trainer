@@ -1,11 +1,16 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import {
   Scale,
   Ruler,
   Dumbbell,
   UtensilsCrossed,
+  Flame,
+  Beef,
+  Droplets,
+  Wheat,
   TrendingDown,
   TrendingUp,
   CalendarDays,
@@ -26,6 +31,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
 import {
   Tabs,
   TabsContent,
@@ -57,7 +63,12 @@ import {
   useExerciseProgress,
   useExerciseSessions,
   useCompletedSessions,
+  useDashboard,
 } from '@/lib/queries/use-analytics';
+import {
+  useDailySummary,
+  useNutritionPlans,
+} from '@/lib/queries/use-nutrition';
 
 const MEASUREMENT_TYPES = [
   { value: 'chest', label: 'Грудь' },
@@ -86,21 +97,77 @@ export default function AnalyticsPage() {
     new Date().toISOString().split('T')[0]
   );
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
+  const todayString = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
 
   // History tab state
   const [selectedEntryId, setSelectedEntryId] = useState<string>('');
   const [selectedHistoryExerciseId, setSelectedHistoryExerciseId] = useState<string>('');
 
   // Queries
+  const { data: dashboard, isLoading: dashboardLoading } = useDashboard();
   const { data: weightLogs, isLoading: weightLoading } = useWeightLogs();
   const { data: measurementLogs, isLoading: measurementsLoading } = useMeasurements(measurementType);
   const { data: trainedExercises, isLoading: exercisesLoading } = useTrainedExercises();
-  const { data: exerciseProgress, isLoading: progressLoading } = useExerciseProgress(selectedExerciseId);
+  const effectiveSelectedExerciseId =
+    selectedExerciseId ?? trainedExercises?.[0]?.exercise_id ?? null;
+  const { data: exerciseProgress, isLoading: progressLoading } = useExerciseProgress(effectiveSelectedExerciseId);
   const { data: completedSessions, isLoading: historyLoading } = useCompletedSessions();
+  const { data: nutritionSummary, isLoading: nutritionSummaryLoading } = useDailySummary(todayString);
+  const { data: nutritionPlans, isLoading: nutritionPlansLoading } = useNutritionPlans();
 
   // Mutations
   const logWeightMutation = useLogWeight();
   const logMeasurementMutation = useLogMeasurement();
+  const activeNutritionPlan = nutritionPlans?.find((plan) => plan.is_active);
+  const nutritionTargets = {
+    calories: activeNutritionPlan?.daily_calories ?? 2500,
+    protein: activeNutritionPlan?.daily_protein_g ?? 180,
+    fat: activeNutritionPlan?.daily_fat_g ?? 80,
+    carbs: activeNutritionPlan?.daily_carbs_g ?? 280,
+  };
+  const nutritionTotals = nutritionSummary ?? {
+    total_calories: 0,
+    total_protein_g: 0,
+    total_fat_g: 0,
+    total_carbs_g: 0,
+    meals_logged: 0,
+  };
+  const nutritionMetrics = [
+    {
+      label: 'Калории',
+      current: Math.round(nutritionTotals.total_calories),
+      target: nutritionTargets.calories,
+      unit: 'ккал',
+      icon: Flame,
+    },
+    {
+      label: 'Белки',
+      current: Math.round(nutritionTotals.total_protein_g),
+      target: nutritionTargets.protein,
+      unit: 'г',
+      icon: Beef,
+    },
+    {
+      label: 'Жиры',
+      current: Math.round(nutritionTotals.total_fat_g),
+      target: nutritionTargets.fat,
+      unit: 'г',
+      icon: Droplets,
+    },
+    {
+      label: 'Углеводы',
+      current: Math.round(nutritionTotals.total_carbs_g),
+      target: nutritionTargets.carbs,
+      unit: 'г',
+      icon: Wheat,
+    },
+  ];
 
   // History tab: selected session and resolved exercise_id
   const selectedSession = useMemo(() => {
@@ -179,16 +246,9 @@ export default function AnalyticsPage() {
     }));
   }, [exerciseProgress]);
 
-  // Auto-select first exercise
-  useEffect(() => {
-    if (trainedExercises && trainedExercises.length > 0 && !selectedExerciseId) {
-      setSelectedExerciseId(trainedExercises[0].exercise_id);
-    }
-  }, [trainedExercises, selectedExerciseId]);
-
   const currentWeight = weightLogs && weightLogs.length > 0
     ? weightLogs[weightLogs.length - 1].weight_kg
-    : null;
+    : dashboard?.current_weight ?? null;
   const startWeight = weightLogs && weightLogs.length > 0
     ? weightLogs[0].weight_kg
     : null;
@@ -280,12 +340,12 @@ export default function AnalyticsPage() {
             <div className="grid gap-4 sm:grid-cols-3">
               <Card className="border-border/50">
                 <CardContent className="flex items-center gap-3 pt-6">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-blue-500/10">
-                    <Scale className="size-5 text-blue-500" />
+                  <div className="flex size-10 items-center justify-center rounded-lg bg-primary/12">
+                    <Scale className="size-5 text-primary" />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Текущий вес</p>
-                    {weightLoading ? (
+                    {weightLoading || dashboardLoading ? (
                       <Skeleton className="h-7 w-20" />
                     ) : (
                       <p className="text-xl font-bold">
@@ -297,11 +357,11 @@ export default function AnalyticsPage() {
               </Card>
               <Card className="border-border/50">
                 <CardContent className="flex items-center gap-3 pt-6">
-                  <div className={`flex size-10 items-center justify-center rounded-lg ${isWeightDown ? 'bg-green-500/10' : 'bg-orange-500/10'}`}>
+                  <div className={`flex size-10 items-center justify-center rounded-lg ${isWeightDown ? 'bg-primary/12' : 'bg-red-500/10'}`}>
                     {isWeightDown ? (
-                      <TrendingDown className="size-5 text-green-500" />
+                      <TrendingDown className="size-5 text-primary" />
                     ) : (
-                      <TrendingUp className="size-5 text-orange-500" />
+                      <TrendingUp className="size-5 text-primary" />
                     )}
                   </div>
                   <div>
@@ -318,8 +378,8 @@ export default function AnalyticsPage() {
               </Card>
               <Card className="border-border/50">
                 <CardContent className="flex items-center gap-3 pt-6">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-purple-500/10">
-                    <CalendarDays className="size-5 text-purple-500" />
+                  <div className="flex size-10 items-center justify-center rounded-lg bg-white/[0.055]">
+                    <CalendarDays className="size-5 text-muted-foreground" />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">
@@ -334,83 +394,6 @@ export default function AnalyticsPage() {
                 </CardContent>
               </Card>
             </div>
-
-            {/* Chart */}
-            <Card className="border-border/50">
-              <CardHeader>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <CardTitle>Динамика веса</CardTitle>
-                    <CardDescription>
-                      Изменение вашего веса
-                    </CardDescription>
-                  </div>
-                  <div className="flex gap-1">
-                    {([['week', 'Неделя'], ['month', 'Месяц'], ['year', 'Год'], ['all', 'Всё']] as const).map(([val, label]) => (
-                      <Button
-                        key={val}
-                        variant={weightPeriod === val ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setWeightPeriod(val)}
-                        className="text-xs"
-                      >
-                        {label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {weightLoading ? (
-                  <Skeleton className="h-72 w-full rounded-lg" />
-                ) : chartData.length === 0 ? (
-                  <div className="flex h-72 items-center justify-center">
-                    <p className="text-sm text-muted-foreground">
-                      Нет данных. Запишите свой первый вес ниже.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="h-72 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={chartData}
-                        margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                        <XAxis
-                          dataKey="date"
-                          className="text-xs"
-                          tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                        />
-                        <YAxis
-                          domain={['auto', 'auto']}
-                          className="text-xs"
-                          tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                          tickFormatter={(value: number) => `${value} кг`}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--popover))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px',
-                            color: 'hsl(var(--popover-foreground))',
-                          }}
-                          formatter={(value) => [`${value} кг`, 'Вес']}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="weight"
-                          stroke="#10b981"
-                          strokeWidth={2}
-                          dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
-                          activeDot={{ r: 6 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
 
             {/* Log weight form */}
             <Card className="border-border/50">
@@ -445,6 +428,7 @@ export default function AnalyticsPage() {
                     />
                   </div>
                   <Button
+                    className="priority-action"
                     onClick={handleLogWeight}
                     disabled={!newWeight || logWeightMutation.isPending}
                   >
@@ -458,6 +442,84 @@ export default function AnalyticsPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Chart */}
+            <Card className="border-border/50">
+              <CardHeader>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle>Динамика веса</CardTitle>
+                    <CardDescription>
+                      Изменение вашего веса по повторным замерам
+                    </CardDescription>
+                  </div>
+                  <div className="flex gap-1">
+                    {([['week', 'Неделя'], ['month', 'Месяц'], ['year', 'Год'], ['all', 'Всё']] as const).map(([val, label]) => (
+                      <Button
+                        key={val}
+                        variant={weightPeriod === val ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setWeightPeriod(val)}
+                        className="text-xs"
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {weightLoading ? (
+                  <Skeleton className="h-72 w-full rounded-lg" />
+                ) : chartData.length === 0 ? (
+                  <div className="flex h-72 items-center justify-center">
+                    <p className="text-sm text-muted-foreground">
+                      Добавьте новый замер, чтобы построить график динамики.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="h-72 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={chartData}
+                        margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                        <XAxis
+                          dataKey="date"
+                          className="text-xs"
+                          tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                        />
+                        <YAxis
+                          domain={['auto', 'auto']}
+                          className="text-xs"
+                          tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                          tickFormatter={(value: number) => `${value} кг`}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--popover))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                            color: 'hsl(var(--popover-foreground))',
+                          }}
+                          formatter={(value) => [`${value} кг`, 'Вес']}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="weight"
+                          stroke="#ff0030"
+                          strokeWidth={2}
+                          dot={{ fill: '#ff0030', strokeWidth: 2, r: 4 }}
+                          activeDot={{ r: 6 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
           </div>
         </TabsContent>
 
@@ -485,68 +547,6 @@ export default function AnalyticsPage() {
                     </Button>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Measurement chart */}
-            <Card className="border-border/50">
-              <CardHeader>
-                <CardTitle>
-                  {getMeasurementLabel(measurementType)} - динамика
-                </CardTitle>
-                <CardDescription>
-                  Изменение замеров за всё время
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {measurementsLoading ? (
-                  <Skeleton className="h-72 w-full rounded-lg" />
-                ) : measurementChartData.length === 0 ? (
-                  <div className="flex h-72 items-center justify-center">
-                    <p className="text-sm text-muted-foreground">
-                      Нет данных для «{getMeasurementLabel(measurementType)}». Запишите первый замер ниже.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="h-72 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={measurementChartData}
-                        margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                        <XAxis
-                          dataKey="date"
-                          className="text-xs"
-                          tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                        />
-                        <YAxis
-                          domain={['auto', 'auto']}
-                          className="text-xs"
-                          tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                          tickFormatter={(value: number) => `${value} см`}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--popover))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px',
-                            color: 'hsl(var(--popover-foreground))',
-                          }}
-                          formatter={(value) => [`${value} см`, getMeasurementLabel(measurementType)]}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="value"
-                          stroke="hsl(var(--primary))"
-                          strokeWidth={2}
-                          dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
-                          activeDot={{ r: 6 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
               </CardContent>
             </Card>
 
@@ -598,6 +598,7 @@ export default function AnalyticsPage() {
                     />
                   </div>
                   <Button
+                    className="priority-action"
                     onClick={handleLogMeasurement}
                     disabled={!measurementValue || logMeasurementMutation.isPending}
                   >
@@ -609,6 +610,68 @@ export default function AnalyticsPage() {
                     Записать
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Measurement chart */}
+            <Card className="border-border/50">
+              <CardHeader>
+                <CardTitle>
+                  {getMeasurementLabel(measurementType)} - динамика
+                </CardTitle>
+                <CardDescription>
+                  Изменение замеров за всё время
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {measurementsLoading ? (
+                  <Skeleton className="h-72 w-full rounded-lg" />
+                ) : measurementChartData.length === 0 ? (
+                  <div className="flex h-72 items-center justify-center">
+                    <p className="text-sm text-muted-foreground">
+                      Нет данных для «{getMeasurementLabel(measurementType)}». Запишите первый замер выше.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="h-72 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={measurementChartData}
+                        margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                        <XAxis
+                          dataKey="date"
+                          className="text-xs"
+                          tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                        />
+                        <YAxis
+                          domain={['auto', 'auto']}
+                          className="text-xs"
+                          tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                          tickFormatter={(value: number) => `${value} см`}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--popover))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                            color: 'hsl(var(--popover-foreground))',
+                          }}
+                          formatter={(value) => [`${value} см`, getMeasurementLabel(measurementType)]}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="value"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth={2}
+                          dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
+                          activeDot={{ r: 6 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -664,7 +727,7 @@ export default function AnalyticsPage() {
                   </p>
                 </div>
                 <Button variant="outline" asChild>
-                  <a href="/workouts">Перейти к тренировкам</a>
+                  <Link href="/workouts">Перейти к тренировкам</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -680,7 +743,7 @@ export default function AnalyticsPage() {
                 </CardHeader>
                 <CardContent>
                   <Select
-                    value={selectedExerciseId ?? ''}
+                    value={effectiveSelectedExerciseId ?? ''}
                     onValueChange={setSelectedExerciseId}
                   >
                     <SelectTrigger className="w-full sm:w-80">
@@ -697,7 +760,7 @@ export default function AnalyticsPage() {
                 </CardContent>
               </Card>
 
-              {selectedExerciseId && (
+              {effectiveSelectedExerciseId && (
                 <>
                   {/* Global progress chart */}
                   <Card className="border-border/50">
@@ -811,9 +874,9 @@ export default function AnalyticsPage() {
                               <Line
                                 type="monotone"
                                 dataKey="volume"
-                                stroke="#10b981"
+                                stroke="#ff0030"
                                 strokeWidth={2}
-                                dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
+                                dot={{ fill: '#ff0030', strokeWidth: 2, r: 4 }}
                                 activeDot={{ r: 6 }}
                               />
                             </LineChart>
@@ -849,7 +912,7 @@ export default function AnalyticsPage() {
                   </p>
                 </div>
                 <Button variant="outline" asChild>
-                  <a href="/workouts">Перейти к тренировкам</a>
+                  <Link href="/workouts">Перейти к тренировкам</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -967,9 +1030,9 @@ export default function AnalyticsPage() {
                             <Line
                               type="monotone"
                               dataKey="volume"
-                              stroke="#10b981"
+                              stroke="#ff0030"
                               strokeWidth={2}
-                              dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
+                              dot={{ fill: '#ff0030', strokeWidth: 2, r: 4 }}
                               activeDot={{ r: 6 }}
                             />
                           </LineChart>
@@ -985,25 +1048,86 @@ export default function AnalyticsPage() {
 
         {/* Nutrition tab */}
         <TabsContent value="nutrition" className="mt-6">
-          <Card className="border-border/50">
-            <CardContent className="flex flex-col items-center justify-center gap-4 py-16">
-              <div className="flex size-16 items-center justify-center rounded-full bg-muted">
-                <UtensilsCrossed className="size-8 text-muted-foreground" />
-              </div>
-              <div className="text-center">
-                <Badge variant="secondary" className="mb-3">
-                  Скоро
-                </Badge>
-                <h3 className="text-lg font-semibold">
-                  Аналитика питания
-                </h3>
-                <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                  Графики потребления калорий и макронутриентов за неделю, месяц
-                  и произвольный период. Эта функция скоро будет доступна.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex flex-col gap-6">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {nutritionSummaryLoading || nutritionPlansLoading
+                ? Array.from({ length: 4 }).map((_, index) => (
+                    <Card key={index} className="border-border/50">
+                      <CardContent className="pt-6">
+                        <Skeleton className="h-5 w-24" />
+                        <Skeleton className="mt-4 h-8 w-28" />
+                        <Skeleton className="mt-4 h-2 w-full" />
+                      </CardContent>
+                    </Card>
+                  ))
+                : nutritionMetrics.map((metric) => {
+                    const percentage = metric.target > 0
+                      ? Math.min(100, Math.round((metric.current / metric.target) * 100))
+                      : 0;
+                    const Icon = metric.icon;
+
+                    return (
+                      <Card key={metric.label} className="border-border/50">
+                        <CardContent className="pt-6">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm text-muted-foreground">{metric.label}</p>
+                              <p className="mt-1 text-2xl font-bold">
+                                {metric.current}
+                                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                                  / {metric.target} {metric.unit}
+                                </span>
+                              </p>
+                            </div>
+                            <div className="flex size-10 items-center justify-center rounded-full bg-primary/10">
+                              <Icon className="size-5 text-primary" />
+                            </div>
+                          </div>
+                          <Progress value={percentage} className="mt-4 h-2" />
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            {percentage}% дневной цели
+                          </p>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+            </div>
+
+            <Card className="border-border/50">
+              <CardHeader>
+                <CardTitle>Питание сегодня</CardTitle>
+                <CardDescription>
+                  {activeNutritionPlan
+                    ? `Цели из активного плана: ${activeNutritionPlan.title}`
+                    : 'Цели по умолчанию до активации плана питания'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+                      <UtensilsCrossed className="size-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">
+                        Записано приёмов пищи: {nutritionTotals.meals_logged}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Дата: {new Date(`${todayString}T00:00:00`).toLocaleDateString('ru-RU', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                  <Button variant="outline" asChild>
+                    <Link href="/nutrition">Открыть дневник питания</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

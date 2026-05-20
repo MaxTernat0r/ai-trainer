@@ -12,7 +12,6 @@ import {
   Wheat,
   UtensilsCrossed,
   Loader2,
-  X,
   Sparkles,
   Check,
 } from 'lucide-react';
@@ -36,13 +35,6 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   useDailySummary,
   useNutritionLogs,
@@ -390,6 +382,8 @@ export default function NutritionPage() {
       {
         onSuccess: () => {
           toast.success(`${item.food_name} добавлен`);
+          setRecognitionSheetOpen(false);
+          setRecognitionResult(null);
         },
         onError: () => {
           toast.error('Не удалось добавить продукт');
@@ -455,7 +449,7 @@ export default function NutritionPage() {
         <Button
           variant="outline"
           size="sm"
-          className="gap-1.5"
+          className="priority-action gap-1.5"
           onClick={() => setGenerateSheetOpen(true)}
         >
           <Sparkles className="size-4" />
@@ -499,8 +493,8 @@ export default function NutritionPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="flex size-9 items-center justify-center rounded-lg bg-green-500/10">
-                      <UtensilsCrossed className="size-4 text-green-600" />
+                    <div className="flex size-9 items-center justify-center rounded-lg bg-primary/12">
+                      <UtensilsCrossed className="size-4 text-primary" />
                     </div>
                     <CardTitle className="text-base">{meal.name}</CardTitle>
                   </div>
@@ -556,7 +550,7 @@ export default function NutritionPage() {
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5"
+              className="priority-action gap-1.5"
               onClick={() => setGenerateSheetOpen(true)}
             >
               <Sparkles className="size-4" />
@@ -583,8 +577,8 @@ export default function NutritionPage() {
                 current={summary.total_calories}
                 target={targets.calories}
                 unit="ккал"
-                color="#f97316"
-                iconColorClass="text-orange-500"
+                color="#b82a3e"
+                iconColorClass="text-primary"
                 icon={Flame}
               />
               <NutrientRing
@@ -601,8 +595,8 @@ export default function NutritionPage() {
                 current={summary.total_fat_g}
                 target={targets.fat}
                 unit="г"
-                color="#3b82f6"
-                iconColorClass="text-blue-500"
+                color="#a6a3ad"
+                iconColorClass="text-muted-foreground"
                 icon={Droplets}
               />
               <NutrientRing
@@ -610,8 +604,8 @@ export default function NutritionPage() {
                 current={summary.total_carbs_g}
                 target={targets.carbs}
                 unit="г"
-                color="#eab308"
-                iconColorClass="text-yellow-500"
+                color="#7b1d2e"
+                iconColorClass="text-primary"
                 icon={Wheat}
               />
             </div>
@@ -695,32 +689,32 @@ export default function NutritionPage() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <div className="rounded-lg bg-orange-500/10 p-3 text-center">
-                <p className="text-lg font-bold text-orange-600 dark:text-orange-400">
+              <div className="rounded-lg border border-[#712031]/45 bg-white/[0.035] p-3 text-center">
+                <p className="text-lg font-bold text-primary">
                   {summary.total_calories}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   / {targets.calories} ккал
                 </p>
               </div>
-              <div className="rounded-lg bg-red-500/10 p-3 text-center">
-                <p className="text-lg font-bold text-red-600 dark:text-red-400">
+              <div className="rounded-lg border border-[#712031]/45 bg-white/[0.035] p-3 text-center">
+                <p className="text-lg font-bold text-[#f5e7ea]">
                   {summary.total_protein_g}г
                 </p>
                 <p className="text-xs text-muted-foreground">
                   / {targets.protein}г белка
                 </p>
               </div>
-              <div className="rounded-lg bg-blue-500/10 p-3 text-center">
-                <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
+              <div className="rounded-lg border border-[#712031]/45 bg-white/[0.035] p-3 text-center">
+                <p className="text-lg font-bold text-muted-foreground">
                   {summary.total_fat_g}г
                 </p>
                 <p className="text-xs text-muted-foreground">
                   / {targets.fat}г жиров
                 </p>
               </div>
-              <div className="rounded-lg bg-yellow-500/10 p-3 text-center">
-                <p className="text-lg font-bold text-yellow-600 dark:text-yellow-400">
+              <div className="rounded-lg border border-[#712031]/45 bg-white/[0.035] p-3 text-center">
+                <p className="text-lg font-bold text-primary">
                   {summary.total_carbs_g}г
                 </p>
                 <p className="text-xs text-muted-foreground">

@@ -28,9 +28,9 @@ const difficultyLabels: Record<string, string> = {
 };
 
 const difficultyColors: Record<string, string> = {
-  beginner: 'bg-green-500/10 text-green-600 dark:text-green-400',
-  intermediate: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
-  advanced: 'bg-red-500/10 text-red-600 dark:text-red-400',
+  beginner: 'bg-white/[0.055] text-foreground/80',
+  intermediate: 'bg-primary/10 text-primary',
+  advanced: 'bg-[#ff0030]/15 text-[#f5e7ea]',
 };
 
 const typeLabels: Record<string, string> = {
@@ -40,9 +40,9 @@ const typeLabels: Record<string, string> = {
 };
 
 const typeColors: Record<string, string> = {
-  compound: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
-  isolation: 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
-  cardio: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  compound: 'bg-white/[0.055] text-foreground/80',
+  isolation: 'bg-primary/10 text-primary',
+  cardio: 'bg-[#ff0030]/15 text-[#f5e7ea]',
 };
 
 export default function ExercisesPage() {

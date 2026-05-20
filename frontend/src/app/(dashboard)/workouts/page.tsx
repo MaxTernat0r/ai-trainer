@@ -68,9 +68,9 @@ const difficultyLabels: Record<string, string> = {
 };
 
 const difficultyColors: Record<string, string> = {
-  beginner: 'bg-green-500/10 text-green-600 dark:text-green-400',
-  intermediate: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
-  advanced: 'bg-red-500/10 text-red-600 dark:text-red-400',
+  beginner: 'bg-white/[0.055] text-foreground/80',
+  intermediate: 'bg-primary/10 text-primary',
+  advanced: 'bg-[#ff0030]/15 text-[#f5e7ea]',
 };
 
 const goalLabels: Record<string, string> = {
@@ -111,7 +111,6 @@ export default function WorkoutsPage() {
   const deleteEntryMutation = useDeleteScheduleEntry();
 
   const activePlan = plans?.find((p) => p.is_active) ?? null;
-  const inactivePlans = plans?.filter((p) => !p.is_active) ?? [];
 
   // Fetch full active plan to show sessions
   const { data: activePlanFull } = useWorkoutPlan(activePlan?.id);
@@ -329,7 +328,7 @@ export default function WorkoutsPage() {
                 {generateMutation.isPending ? (
                   <>
                     <Loader2 className="size-4 animate-spin" />
-                    Генерация... Это может занять до 30 секунд
+                    Генерация... Это может занять до 90 секунд
                   </>
                 ) : (
                   <>
@@ -591,7 +590,7 @@ export default function WorkoutsPage() {
                                 key={entry.id}
                                 className={`group/entry flex items-center gap-1 rounded px-1 py-0.5 text-[10px] leading-tight ${
                                   entry.is_completed
-                                    ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                                    ? 'bg-primary/12 text-primary'
                                     : 'bg-primary/10 text-primary'
                                 }`}
                               >
@@ -603,7 +602,7 @@ export default function WorkoutsPage() {
                                     toggleCompleteMutation.mutate(entry.id);
                                   }}
                                 >
-                                  <CheckCircle2 className={`size-3 ${entry.is_completed ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground/40'}`} />
+                                  <CheckCircle2 className={`size-3 ${entry.is_completed ? 'text-primary' : 'text-muted-foreground/40'}`} />
                                 </button>
                                 <Link
                                   href={`/workouts/${entry.plan_id}?session=${entry.session_id}&entry=${entry.id}`}
@@ -778,7 +777,12 @@ export default function WorkoutsPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={(e) => { e.stopPropagation(); handleActivate(plan.id); }}
+                              className="priority-action"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleActivate(plan.id);
+                              }}
                               disabled={activateMutation.isPending}
                             >
                               {activateMutation.isPending ? (
@@ -791,7 +795,11 @@ export default function WorkoutsPage() {
                               variant="ghost"
                               size="icon"
                               className="text-destructive hover:text-destructive"
-                              onClick={(e) => { e.stopPropagation(); handleDelete(plan.id); }}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDelete(plan.id);
+                              }}
                               disabled={deleteMutation.isPending}
                             >
                               {deleteMutation.isPending ? (

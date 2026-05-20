@@ -19,7 +19,6 @@ import {
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
@@ -176,15 +175,15 @@ export default function ChatPage() {
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="-m-4 flex h-[calc(100vh-4rem)] sm:-m-6 lg:-m-8 md:h-[calc(100vh-4rem)]">
+    <div className="cockpit-panel flex h-full min-h-0 overflow-hidden rounded-lg">
       {/* Sidebar - conversations list */}
       <aside
         className={cn(
-          'flex-col border-r border-border bg-muted/30 transition-all duration-300',
-          sidebarVisible ? 'hidden w-72 md:flex' : 'hidden'
+          'min-h-0 flex-col border-r border-[#712031]/55 bg-black/[0.18] transition-all duration-300',
+          sidebarVisible ? 'hidden w-80 md:flex' : 'hidden'
         )}
       >
-        <div className="flex items-center justify-between border-b border-border p-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-[#712031]/55 p-4">
           <h2 className="font-semibold">Диалоги</h2>
           <div className="flex items-center gap-1">
             <Button
@@ -208,12 +207,12 @@ export default function ChatPage() {
             </Button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-2">
-          <div className="flex flex-col gap-1">
+        <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
+          <div className="flex flex-col gap-2">
             {conversationsLoading ? (
               <>
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="flex items-center gap-3 rounded-lg px-3 py-2.5">
+                  <div key={i} className="glass-lane flex items-center gap-3 rounded-lg px-3 py-2.5">
                     <Skeleton className="size-4 shrink-0 rounded" />
                     <div className="min-w-0 flex-1">
                       <Skeleton className="h-4 w-32" />
@@ -236,13 +235,20 @@ export default function ChatPage() {
                     }
                   }}
                   className={cn(
-                    'group flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors',
+                    'group glass-lane flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-all duration-200',
                     activeConversationId === conv.id
-                      ? 'bg-background shadow-sm'
-                      : 'hover:bg-background/50'
+                      ? 'border-primary/45 bg-primary/12 shadow-[inset_0_1px_0_rgb(255_255_255_/_8%),0_0_20px_rgb(255_0_48_/_10%)]'
+                      : 'border-[#712031]/30 hover:border-primary/35 hover:bg-white/[0.055]'
                   )}
                 >
-                  <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
+                  <MessageSquare
+                    className={cn(
+                      'size-4 shrink-0',
+                      activeConversationId === conv.id
+                        ? 'text-primary'
+                        : 'text-muted-foreground'
+                    )}
+                  />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">
                       {conv.title ?? 'Новый диалог'}
@@ -254,7 +260,7 @@ export default function ChatPage() {
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    className="hidden shrink-0 group-hover:flex"
+                    className="pointer-events-none shrink-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100"
                     onClick={(e) => handleDeleteConversation(conv.id, e)}
                   >
                     <Trash2 className="size-3 text-muted-foreground" />
@@ -271,9 +277,9 @@ export default function ChatPage() {
       </aside>
 
       {/* Main chat area */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Chat header */}
-        <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+        <div className="flex shrink-0 items-center gap-3 border-b border-[#712031]/55 px-4 py-3">
           {!sidebarVisible && (
             <Button
               variant="ghost"
@@ -284,7 +290,7 @@ export default function ChatPage() {
             </Button>
           )}
           <div className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-full bg-primary/10">
+            <div className="flex size-8 items-center justify-center rounded-lg border border-primary/35 bg-primary/12">
               <Bot className="size-4 text-primary" />
             </div>
             <div>
@@ -297,7 +303,7 @@ export default function ChatPage() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-6">
+        <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-6">
           <div className="mx-auto flex max-w-3xl flex-col gap-4">
             {conversationLoading ? (
               <div className="flex flex-col gap-4">
@@ -399,7 +405,7 @@ export default function ChatPage() {
 
         {/* Quick actions */}
         {!hasMessages && !conversationLoading && (
-          <div className="border-t border-border bg-background px-4 pt-3">
+          <div className="shrink-0 border-t border-[#712031]/55 bg-black/[0.18] px-4 pt-3">
             <div className="mx-auto flex max-w-3xl gap-2 overflow-x-auto pb-2">
               {quickActions.map((action) => (
                 <Button
@@ -419,7 +425,7 @@ export default function ChatPage() {
         )}
 
         {/* Input */}
-        <div className="border-t border-border bg-background p-4">
+        <div className="shrink-0 border-t border-[#712031]/55 bg-black/[0.18] p-4">
           <form
             onSubmit={handleSubmit}
             className="mx-auto flex max-w-3xl items-center gap-2"
@@ -434,6 +440,7 @@ export default function ChatPage() {
             <Button
               type="submit"
               size="icon"
+              className="priority-action"
               disabled={!inputValue.trim() || isStreaming}
             >
               {isStreaming ? (

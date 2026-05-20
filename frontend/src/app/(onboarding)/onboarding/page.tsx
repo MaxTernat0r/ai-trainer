@@ -16,7 +16,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { userApi } from '@/lib/api/user';
 import { apiClient } from '@/lib/api/client';
-import type { OnboardingData, MedicalRestriction } from '@/types/user';
+import type { OnboardingData, MedicalRestriction, Profile } from '@/types/user';
 import {
   ArrowLeft,
   ArrowRight,
@@ -97,6 +97,29 @@ const activityLabels: Record<string, string> = Object.fromEntries(activityLevels
 const genderLabels: Record<string, string> = Object.fromEntries(genders.map((g) => [g.value, g.label]));
 const equipmentLabels: Record<string, string> = Object.fromEntries(equipmentOptions.map((e) => [e.value, e.label]));
 
+function profileToOnboardingData(profile: Profile): Partial<OnboardingData> {
+  return {
+    first_name: profile.first_name ?? '',
+    last_name: profile.last_name ?? '',
+    date_of_birth: profile.date_of_birth ?? '',
+    gender: profile.gender ?? '',
+    height_cm: profile.height_cm ?? undefined,
+    weight_kg: profile.weight_kg ?? undefined,
+    goal: profile.goal ?? '',
+    sport_type: profile.sport_type ?? '',
+    experience_level: profile.experience_level ?? '',
+    activity_level: profile.activity_level ?? '',
+    training_days_per_week: profile.training_days_per_week ?? 3,
+    equipment_available: profile.equipment_available ?? 'full_gym',
+    target_weight_kg: profile.target_weight_kg,
+    meals_per_day: profile.meals_per_day ?? 3,
+    food_allergies: profile.food_allergies ?? '',
+    disliked_foods: profile.disliked_foods ?? '',
+    custom_health_notes: profile.custom_health_notes ?? '',
+    medical_restriction_ids: profile.medical_restrictions.map((restriction) => restriction.id),
+  };
+}
+
 export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -132,6 +155,22 @@ export default function OnboardingPage() {
       .then(setMedicalRestrictions)
       .catch(() => {})
       .finally(() => setRestrictionsLoading(false));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    userApi
+      .getProfile()
+      .then((profile) => {
+        if (cancelled) return;
+        setData((prev) => ({ ...prev, ...profileToOnboardingData(profile) }));
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const updateField = <K extends keyof OnboardingData>(key: K, value: OnboardingData[K]) => {
@@ -683,12 +722,12 @@ export default function OnboardingPage() {
             Назад
           </Button>
           {step < TOTAL_STEPS - 1 ? (
-            <Button onClick={next} disabled={!canProceed()}>
+            <Button className="priority-action" onClick={next} disabled={!canProceed()}>
               Далее
               <ArrowRight className="size-4" />
             </Button>
           ) : (
-            <Button onClick={handleSubmit} disabled={isLoading}>
+            <Button className="priority-action" onClick={handleSubmit} disabled={isLoading}>
               {isLoading && <Loader2 className="animate-spin" />}
               Начать тренироваться
               <Check className="size-4" />

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import {
   User as UserIcon,
   Mail,
@@ -34,7 +35,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useProfile } from '@/lib/queries/use-profile';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { authApi } from '@/lib/api/auth';
-import { toast } from 'sonner';
 import type { MedicalRestriction } from '@/types/user';
 
 const genderLabels: Record<string, string> = {
@@ -237,9 +237,11 @@ export default function ProfilePage() {
             Управляйте персональными данными и настройками
           </p>
         </div>
-        <Button variant="outline">
-          <Pencil className="size-4" />
-          Редактировать профиль
+        <Button variant="outline" asChild>
+          <Link href="/onboarding">
+            <Pencil className="size-4" />
+            Редактировать профиль
+          </Link>
         </Button>
       </div>
 
@@ -290,7 +292,7 @@ export default function ProfilePage() {
       <Card className="border-border/50">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Activity className="size-5 text-blue-500" />
+            <Activity className="size-5 text-primary" />
             <CardTitle>Физические параметры</CardTitle>
           </div>
         </CardHeader>
@@ -346,7 +348,7 @@ export default function ProfilePage() {
       <Card className="border-border/50">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Target className="size-5 text-green-500" />
+            <Target className="size-5 text-primary" />
             <CardTitle>Цели</CardTitle>
           </div>
         </CardHeader>
@@ -392,7 +394,7 @@ export default function ProfilePage() {
       <Card className="border-border/50">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Heart className="size-5 text-red-500" />
+            <Heart className="size-5 text-primary" />
             <CardTitle>Медицинские ограничения</CardTitle>
           </div>
         </CardHeader>
@@ -403,7 +405,7 @@ export default function ProfilePage() {
                 (restriction: MedicalRestriction) => (
                   <div
                     key={restriction.id}
-                    className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2"
+                    className="rounded-lg border border-primary/24 bg-primary/8 px-3 py-2"
                   >
                     <p className="text-sm font-medium">{restriction.description || restriction.name}</p>
                   </div>
@@ -416,9 +418,9 @@ export default function ProfilePage() {
             </p>
           )}
           {profile.custom_health_notes && (
-            <div className="mt-4 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3">
+            <div className="mt-4 rounded-lg border border-primary/24 bg-primary/8 p-3">
               <div className="flex items-center gap-2 text-sm font-medium">
-                <NotebookPen className="size-4 text-yellow-500" />
+                <NotebookPen className="size-4 text-primary" />
                 Дополнительные заметки
               </div>
               <p className="mt-1 text-sm text-muted-foreground">{profile.custom_health_notes}</p>
@@ -431,7 +433,7 @@ export default function ProfilePage() {
       <Card className="border-border/50">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <UtensilsCrossed className="size-5 text-orange-500" />
+            <UtensilsCrossed className="size-5 text-primary" />
             <CardTitle>Диетические предпочтения</CardTitle>
           </div>
         </CardHeader>

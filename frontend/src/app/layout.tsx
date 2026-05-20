@@ -15,8 +15,10 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const matrixBursts = Array.from({ length: 12 }, (_, index) => index + 1);
+
 export const metadata: Metadata = {
-  title: "AI Trainer",
+  title: "Coach AI",
   description: "Адаптивная платформа для спортивного планирования с ИИ",
 };
 
@@ -30,12 +32,22 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ThemeProvider>
-          <QueryProvider>
-            {children}
-            <Toaster />
-          </QueryProvider>
-        </ThemeProvider>
+        <div aria-hidden="true" className="global-matrix-field">
+          {matrixBursts.map((burst) => (
+            <span
+              key={burst}
+              className={`matrix-burst matrix-burst-${burst}`}
+            />
+          ))}
+        </div>
+        <div className="app-shell">
+          <ThemeProvider>
+            <QueryProvider>
+              {children}
+              <Toaster />
+            </QueryProvider>
+          </ThemeProvider>
+        </div>
       </body>
     </html>
   );

@@ -25,7 +25,7 @@ export function StatCard({ title, value, subtitle, icon: Icon, trend }: StatCard
             <p className="text-xs text-muted-foreground">{subtitle}</p>
           )}
           {trend && (
-            <p className={`text-xs mt-1 ${trend.value >= 0 ? "text-green-500" : "text-red-500"}`}>
+            <p className={`text-xs mt-1 ${trend.value >= 0 ? "text-primary" : "text-red-300"}`}>
               {trend.value >= 0 ? "+" : ""}{trend.value} {trend.label}
             </p>
           )}

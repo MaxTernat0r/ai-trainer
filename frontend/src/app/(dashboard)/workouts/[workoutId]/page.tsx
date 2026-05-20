@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -32,7 +32,7 @@ import {
   useStartWorkout,
   useToggleComplete,
 } from '@/lib/queries/use-workouts';
-import type { WorkoutSession } from '@/types/workout';
+import type { WorkoutExercise, WorkoutSession } from '@/types/workout';
 
 function formatTime(seconds: number): string {
   const hrs = Math.floor(seconds / 3600);
@@ -49,6 +49,29 @@ interface SetEntry {
   reps: string;
   weight: string;
   completed: boolean;
+}
+
+function buildSetEntries(exercise: WorkoutExercise): SetEntry[] {
+  const sets = exercise.logged_sets.map((ls) => ({
+    setNumber: ls.set_number,
+    reps: ls.reps_completed?.toString() ?? '',
+    weight: ls.weight_kg?.toString() ?? '',
+    completed: true,
+  }));
+
+  for (let i = sets.length; i < exercise.target_sets; i++) {
+    sets.push({ setNumber: i + 1, reps: '', weight: '', completed: false });
+  }
+
+  return sets;
+}
+
+function findInitialExerciseIndex(session: WorkoutSession): number {
+  const firstIncompleteIndex = session.exercises.findIndex(
+    (exercise) => exercise.logged_sets.length < exercise.target_sets
+  );
+
+  return firstIncompleteIndex >= 0 ? firstIncompleteIndex : 0;
 }
 
 // ─── Plan Overview (read-only) ───────────────────────────────────────────────
@@ -178,59 +201,26 @@ function WorkoutSessionView({
     ? plan.sessions.find((s) => s.id === sessionId) ?? plan.sessions[0]
     : undefined;
 
-  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+  const [selectedExerciseIndex, setSelectedExerciseIndex] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [restTimer, setRestTimer] = useState(0);
-  const [setEntries, setSetEntries] = useState<SetEntry[]>([]);
-  const [initialized, setInitialized] = useState(false);
+  const [setEntryOverrides, setSetEntryOverrides] = useState<Record<string, SetEntry[]>>({});
 
-  // Initialize sets for the current exercise
-  const initExerciseSets = useCallback(
-    (exerciseIdx: number) => {
-      if (!session) return;
-      const exercise = session.exercises[exerciseIdx];
-      if (!exercise) return;
-
-      const sets: SetEntry[] = [];
-      exercise.logged_sets.forEach((ls) => {
-        sets.push({
-          setNumber: ls.set_number,
-          reps: ls.reps_completed?.toString() ?? '',
-          weight: ls.weight_kg?.toString() ?? '',
-          completed: true,
-        });
-      });
-      for (let i = sets.length; i < exercise.target_sets; i++) {
-        sets.push({ setNumber: i + 1, reps: '', weight: '', completed: false });
-      }
-      setSetEntries(sets);
-    },
+  const initialExerciseIndex = useMemo(
+    () => (session ? findInitialExerciseIndex(session) : 0),
     [session]
   );
-
-  // Init on session load
-  useEffect(() => {
-    if (session && !initialized) {
-      let startIdx = 0;
-      for (let i = 0; i < session.exercises.length; i++) {
-        const ex = session.exercises[i];
-        if (ex.logged_sets.length < ex.target_sets) {
-          startIdx = i;
-          break;
-        }
-      }
-      setCurrentExerciseIndex(startIdx);
-      setInitialized(true);
-    }
-  }, [session, initialized]);
-
-  // Re-init sets when exercise changes
-  useEffect(() => {
-    if (session && initialized) {
-      initExerciseSets(currentExerciseIndex);
-    }
-  }, [currentExerciseIndex, session, initialized, initExerciseSets]);
+  const currentExerciseIndex = session
+    ? Math.min(
+        selectedExerciseIndex ?? initialExerciseIndex,
+        Math.max(session.exercises.length - 1, 0)
+      )
+    : 0;
+  const exercise = session?.exercises[currentExerciseIndex];
+  const setEntries = exercise
+    ? setEntryOverrides[exercise.id] ?? buildSetEntries(exercise)
+    : [];
 
   // Workout timer
   useEffect(() => {
@@ -247,20 +237,21 @@ function WorkoutSessionView({
   }, [restTimer]);
 
   const updateSet = (setIndex: number, field: 'reps' | 'weight', value: string) => {
-    setSetEntries((prev) => {
-      const next = [...prev];
+    if (!exercise) return;
+
+    setSetEntryOverrides((prev) => {
+      const next = [...(prev[exercise.id] ?? buildSetEntries(exercise))];
       next[setIndex] = { ...next[setIndex], [field]: value };
-      return next;
+      return { ...prev, [exercise.id]: next };
     });
   };
 
   const completeSet = (setIndex: number) => {
-    if (!session) return;
-    const exercise = session.exercises[currentExerciseIndex];
     if (!exercise) return;
     const set = setEntries[setIndex];
     if (!set) return;
 
+    if (selectedExerciseIndex === null) setSelectedExerciseIndex(currentExerciseIndex);
     if (!isTimerRunning) setIsTimerRunning(true);
 
     logSetMutation.mutate(
@@ -276,10 +267,10 @@ function WorkoutSessionView({
       },
       {
         onSuccess: () => {
-          setSetEntries((prev) => {
-            const next = [...prev];
+          setSetEntryOverrides((prev) => {
+            const next = [...(prev[exercise.id] ?? buildSetEntries(exercise))];
             next[setIndex] = { ...next[setIndex], completed: true };
-            return next;
+            return { ...prev, [exercise.id]: next };
           });
           const isLastSet = setEntries.filter((s) => !s.completed).length <= 1;
           if (!isLastSet && exercise.target_rest_seconds) {
@@ -303,14 +294,14 @@ function WorkoutSessionView({
   const goToNextExercise = () => {
     if (!session) return;
     if (currentExerciseIndex < session.exercises.length - 1) {
-      setCurrentExerciseIndex((p) => p + 1);
+      setSelectedExerciseIndex(currentExerciseIndex + 1);
       setRestTimer(0);
     }
   };
 
   const goToPrevExercise = () => {
     if (currentExerciseIndex > 0) {
-      setCurrentExerciseIndex((p) => p - 1);
+      setSelectedExerciseIndex(currentExerciseIndex - 1);
       setRestTimer(0);
     }
   };
@@ -337,7 +328,6 @@ function WorkoutSessionView({
     );
   }
 
-  const exercise = session.exercises[currentExerciseIndex];
   const allSetsCompleted = setEntries.length > 0 && setEntries.every((s) => s.completed);
   const isLastExercise = currentExerciseIndex === session.exercises.length - 1;
   const totalExercises = session.exercises.length;
@@ -365,10 +355,10 @@ function WorkoutSessionView({
             <div className="flex items-center gap-3">
               <div
                 className={`flex size-10 items-center justify-center rounded-full ${
-                  isTimerRunning ? 'bg-green-500/10' : 'bg-muted'
+                  isTimerRunning ? 'bg-primary/12' : 'bg-muted'
                 }`}
               >
-                <Clock className={`size-5 ${isTimerRunning ? 'text-green-500' : 'text-muted-foreground'}`} />
+                <Clock className={`size-5 ${isTimerRunning ? 'text-primary' : 'text-muted-foreground'}`} />
               </div>
               <div>
                 <p className="text-2xl font-bold tabular-nums">{formatTime(elapsedTime)}</p>
@@ -387,11 +377,11 @@ function WorkoutSessionView({
 
       {/* Rest timer */}
       {restTimer > 0 && (
-        <Card className="border-blue-500/30 bg-blue-500/5">
+        <Card className="border-primary/30 bg-primary/8">
           <CardContent className="flex items-center gap-4 pt-6">
-            <Timer className="size-6 text-blue-500" />
+            <Timer className="size-6 text-primary" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Отдых</p>
+              <p className="text-sm font-medium text-primary">Отдых</p>
               <Progress
                 value={
                   exercise?.target_rest_seconds
@@ -401,7 +391,7 @@ function WorkoutSessionView({
                 className="mt-1 h-2"
               />
             </div>
-            <span className="text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400">
+            <span className="text-2xl font-bold tabular-nums text-primary">
               {formatTime(restTimer)}
             </span>
             <Button variant="outline" size="sm" onClick={() => setRestTimer(0)}>
@@ -428,7 +418,7 @@ function WorkoutSessionView({
                   {exercise.target_rest_seconds ? ` | отдых ${exercise.target_rest_seconds}с` : ''}
                 </p>
               </div>
-              {allSetsCompleted && <CheckCircle2 className="ml-auto size-6 text-green-500" />}
+              {allSetsCompleted && <CheckCircle2 className="ml-auto size-6 text-primary" />}
             </div>
             {exercise.notes && (
               <p className="mt-3 rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
@@ -493,7 +483,7 @@ function WorkoutSessionView({
                             Готово
                           </Button>
                         ) : (
-                          <CheckCircle2 className="size-5 text-green-500" />
+                          <CheckCircle2 className="size-5 text-primary" />
                         )}
                       </td>
                     </tr>
@@ -540,12 +530,12 @@ function WorkoutSessionView({
           <button
             key={ex.id}
             type="button"
-            onClick={() => { setCurrentExerciseIndex(idx); setRestTimer(0); }}
+            onClick={() => { setSelectedExerciseIndex(idx); setRestTimer(0); }}
             className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-medium transition-colors ${
               idx === currentExerciseIndex
                 ? 'bg-primary text-primary-foreground'
                 : idx < currentExerciseIndex
-                  ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                  ? 'bg-primary/12 text-primary'
                   : 'bg-muted text-muted-foreground'
             }`}
           >
