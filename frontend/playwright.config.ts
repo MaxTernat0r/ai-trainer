@@ -25,5 +25,29 @@ export default defineConfig({
       name: 'mobile-414',
       use: { ...devices['iPhone 14 Pro Max'], viewport: { width: 414, height: 896 } },
     },
+    {
+      name: 'webkit-320',
+      use: {
+        ...devices['iPhone SE'],
+        browserName: 'webkit',
+        viewport: { width: 320, height: 568 },
+      },
+    },
+    {
+      name: 'webkit-375',
+      use: {
+        ...devices['iPhone 12'],
+        browserName: 'webkit',
+        viewport: { width: 375, height: 667 },
+      },
+    },
+    {
+      name: 'webkit-414',
+      use: {
+        ...devices['iPhone 14 Pro Max'],
+        browserName: 'webkit',
+        viewport: { width: 414, height: 896 },
+      },
+    },
   ],
 });
