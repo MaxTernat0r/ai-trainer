@@ -37,13 +37,12 @@ export function useAuth(): UseAuthReturn {
     async (email: string, password: string) => {
       setIsLoading(true);
       try {
-        const response = await authApi.register(email, password);
-        setAuth(response.access_token, response.user);
+        await authApi.register(email, password);
       } finally {
         setIsLoading(false);
       }
     },
-    [setAuth]
+    []
   );
 
   const logout = useCallback(async () => {
