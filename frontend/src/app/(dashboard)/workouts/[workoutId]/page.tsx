@@ -455,7 +455,7 @@ function WorkoutSessionView({
                           value={set.weight}
                           onChange={(e) => updateSet(setIndex, 'weight', e.target.value)}
                           disabled={set.completed}
-                          className="h-9 w-24"
+                          className="h-9 w-16 sm:w-24"
                         />
                       </td>
                       <td className="py-3 pr-3">
@@ -465,7 +465,7 @@ function WorkoutSessionView({
                           value={set.reps}
                           onChange={(e) => updateSet(setIndex, 'reps', e.target.value)}
                           disabled={set.completed}
-                          className="h-9 w-24"
+                          className="h-9 w-16 sm:w-24"
                         />
                       </td>
                       <td className="py-3">
