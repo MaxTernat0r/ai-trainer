@@ -737,7 +737,7 @@ export default function NutritionPage() {
       />
 
       {/* Floating "scan by photo" button */}
-      <div className="fixed bottom-24 right-6 z-40 md:bottom-8">
+      <div className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-6 z-40">
         <Button
           size="lg"
           className="size-14 rounded-full shadow-lg"

@@ -299,17 +299,17 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-4 sm:gap-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Аналитика</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Аналитика</h1>
+        <p className="text-sm text-muted-foreground sm:text-base">
           Отслеживайте прогресс и анализируйте результаты
         </p>
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="weight" className="w-full">
+      <Tabs defaultValue="weight" className="w-full min-w-0">
         <div className="no-scrollbar -mx-1 overflow-x-auto px-1">
           <TabsList className="w-max min-w-full sm:w-auto sm:min-w-0">
             <TabsTrigger value="weight" className="gap-1.5">
@@ -336,21 +336,21 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Weight tab */}
-        <TabsContent value="weight" className="mt-6">
-          <div className="flex flex-col gap-6">
+        <TabsContent value="weight" className="mt-4 sm:mt-6">
+          <div className="flex flex-col gap-4 sm:gap-6">
             {/* Stats row */}
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4">
               <Card className="border-border/50">
-                <CardContent className="flex items-center gap-3 pt-6">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-primary/12">
-                    <Scale className="size-5 text-primary" />
+                <CardContent className="flex items-center gap-2 pt-4 sm:gap-3 sm:pt-6">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/12 sm:size-10">
+                    <Scale className="size-4 text-primary sm:size-5" />
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Текущий вес</p>
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground sm:text-sm">Текущий вес</p>
                     {weightLoading || dashboardLoading ? (
-                      <Skeleton className="h-7 w-20" />
+                      <Skeleton className="h-6 w-16 sm:h-7 sm:w-20" />
                     ) : (
-                      <p className="text-xl font-bold">
+                      <p className="text-base font-bold sm:text-xl">
                         {currentWeight !== null ? `${currentWeight} кг` : '-- кг'}
                       </p>
                     )}
@@ -358,39 +358,39 @@ export default function AnalyticsPage() {
                 </CardContent>
               </Card>
               <Card className="border-border/50">
-                <CardContent className="flex items-center gap-3 pt-6">
-                  <div className={`flex size-10 items-center justify-center rounded-lg ${isWeightDown ? 'bg-primary/12' : 'bg-red-500/10'}`}>
+                <CardContent className="flex items-center gap-2 pt-4 sm:gap-3 sm:pt-6">
+                  <div className={`flex size-8 shrink-0 items-center justify-center rounded-lg sm:size-10 ${isWeightDown ? 'bg-primary/12' : 'bg-red-500/10'}`}>
                     {isWeightDown ? (
-                      <TrendingDown className="size-5 text-primary" />
+                      <TrendingDown className="size-4 text-primary sm:size-5" />
                     ) : (
-                      <TrendingUp className="size-5 text-primary" />
+                      <TrendingUp className="size-4 text-primary sm:size-5" />
                     )}
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Изменение</p>
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground sm:text-sm">Изменение</p>
                     {weightLoading ? (
-                      <Skeleton className="h-7 w-20" />
+                      <Skeleton className="h-6 w-16 sm:h-7 sm:w-20" />
                     ) : (
-                      <p className="text-xl font-bold">
+                      <p className="text-base font-bold sm:text-xl">
                         {weightChange !== null ? `${weightChange} кг` : '-- кг'}
                       </p>
                     )}
                   </div>
                 </CardContent>
               </Card>
-              <Card className="border-border/50">
-                <CardContent className="flex items-center gap-3 pt-6">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-white/[0.055]">
-                    <CalendarDays className="size-5 text-muted-foreground" />
+              <Card className="col-span-2 border-border/50 sm:col-span-1">
+                <CardContent className="flex items-center gap-2 pt-4 sm:gap-3 sm:pt-6">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.055] sm:size-10">
+                    <CalendarDays className="size-4 text-muted-foreground sm:size-5" />
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground sm:text-sm">
                       Записей
                     </p>
                     {weightLoading ? (
-                      <Skeleton className="h-7 w-12" />
+                      <Skeleton className="h-6 w-12 sm:h-7" />
                     ) : (
-                      <p className="text-xl font-bold">{weightLogs?.length ?? 0}</p>
+                      <p className="text-base font-bold sm:text-xl">{weightLogs?.length ?? 0}</p>
                     )}
                   </div>
                 </CardContent>
@@ -400,14 +400,14 @@ export default function AnalyticsPage() {
             {/* Log weight form */}
             <Card className="border-border/50">
               <CardHeader>
-                <CardTitle>Записать вес</CardTitle>
+                <CardTitle className="text-base sm:text-lg">Записать вес</CardTitle>
                 <CardDescription>
                   Регулярно записывайте вес для отслеживания прогресса
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-                  <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+                  <div className="flex flex-1 flex-col gap-2 sm:flex-none">
                     <Label htmlFor="weight">Вес (кг)</Label>
                     <Input
                       id="weight"
@@ -419,7 +419,7 @@ export default function AnalyticsPage() {
                       className="w-full sm:w-32"
                     />
                   </div>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-1 flex-col gap-2 sm:flex-none">
                     <Label htmlFor="date">Дата</Label>
                     <Input
                       id="date"
@@ -430,7 +430,7 @@ export default function AnalyticsPage() {
                     />
                   </div>
                   <Button
-                    className="priority-action"
+                    className="priority-action w-full sm:w-auto"
                     onClick={handleLogWeight}
                     disabled={!newWeight || logWeightMutation.isPending}
                   >
@@ -450,19 +450,19 @@ export default function AnalyticsPage() {
               <CardHeader>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <CardTitle>Динамика веса</CardTitle>
+                    <CardTitle className="text-base sm:text-lg">Динамика веса</CardTitle>
                     <CardDescription>
                       Изменение вашего веса по повторным замерам
                     </CardDescription>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto px-1">
                     {([['week', 'Неделя'], ['month', 'Месяц'], ['year', 'Год'], ['all', 'Всё']] as const).map(([val, label]) => (
                       <Button
                         key={val}
                         variant={weightPeriod === val ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => setWeightPeriod(val)}
-                        className="text-xs"
+                        className="shrink-0 text-xs"
                       >
                         {label}
                       </Button>
@@ -472,31 +472,32 @@ export default function AnalyticsPage() {
               </CardHeader>
               <CardContent>
                 {weightLoading ? (
-                  <Skeleton className="h-72 w-full rounded-lg" />
+                  <Skeleton className="h-56 w-full rounded-lg sm:h-72" />
                 ) : chartData.length === 0 ? (
-                  <div className="flex h-72 items-center justify-center">
+                  <div className="flex h-56 items-center justify-center sm:h-72">
                     <p className="text-sm text-muted-foreground">
                       Добавьте новый замер, чтобы построить график динамики.
                     </p>
                   </div>
                 ) : (
-                  <div className="h-72 w-full">
+                  <div className="-mx-3 h-56 sm:mx-0 sm:h-72">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart
                         data={chartData}
-                        margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                        margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                         <XAxis
                           dataKey="date"
-                          className="text-xs"
-                          tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                          interval="preserveStartEnd"
+                          minTickGap={24}
                         />
                         <YAxis
                           domain={['auto', 'auto']}
-                          className="text-xs"
-                          tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                          tickFormatter={(value: number) => `${value} кг`}
+                          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                          tickFormatter={(value: number) => `${value}`}
+                          width={36}
                         />
                         <Tooltip
                           contentStyle={{
@@ -512,8 +513,8 @@ export default function AnalyticsPage() {
                           dataKey="weight"
                           stroke="#ff0030"
                           strokeWidth={2}
-                          dot={{ fill: '#ff0030', strokeWidth: 2, r: 4 }}
-                          activeDot={{ r: 6 }}
+                          dot={{ fill: '#ff0030', strokeWidth: 2, r: 3 }}
+                          activeDot={{ r: 5 }}
                         />
                       </LineChart>
                     </ResponsiveContainer>
@@ -526,12 +527,12 @@ export default function AnalyticsPage() {
         </TabsContent>
 
         {/* Measurements tab */}
-        <TabsContent value="measurements" className="mt-6">
-          <div className="flex flex-col gap-6">
+        <TabsContent value="measurements" className="mt-4 sm:mt-6">
+          <div className="flex flex-col gap-4 sm:gap-6">
             {/* Measurement type selector */}
             <Card className="border-border/50">
               <CardHeader>
-                <CardTitle>Замеры тела</CardTitle>
+                <CardTitle className="text-base sm:text-lg">Замеры тела</CardTitle>
                 <CardDescription>
                   Отслеживайте объёмы различных частей тела
                 </CardDescription>
@@ -555,14 +556,14 @@ export default function AnalyticsPage() {
             {/* Log measurement form */}
             <Card className="border-border/50">
               <CardHeader>
-                <CardTitle>Записать замер</CardTitle>
+                <CardTitle className="text-base sm:text-lg">Записать замер</CardTitle>
                 <CardDescription>
                   Выберите тип замера и введите значение в сантиметрах
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-                  <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+                  <div className="flex flex-1 flex-col gap-2 sm:flex-none">
                     <Label>Тип замера</Label>
                     <Select value={measurementType} onValueChange={setMeasurementType}>
                       <SelectTrigger className="w-full sm:w-40">
@@ -577,7 +578,7 @@ export default function AnalyticsPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-1 flex-col gap-2 sm:flex-none">
                     <Label htmlFor="measurement-value">Значение (см)</Label>
                     <Input
                       id="measurement-value"
@@ -589,7 +590,7 @@ export default function AnalyticsPage() {
                       className="w-full sm:w-32"
                     />
                   </div>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-1 flex-col gap-2 sm:flex-none">
                     <Label htmlFor="measurement-date">Дата</Label>
                     <Input
                       id="measurement-date"
@@ -600,7 +601,7 @@ export default function AnalyticsPage() {
                     />
                   </div>
                   <Button
-                    className="priority-action"
+                    className="priority-action w-full sm:w-auto"
                     onClick={handleLogMeasurement}
                     disabled={!measurementValue || logMeasurementMutation.isPending}
                   >
@@ -618,7 +619,7 @@ export default function AnalyticsPage() {
             {/* Measurement chart */}
             <Card className="border-border/50">
               <CardHeader>
-                <CardTitle>
+                <CardTitle className="text-base sm:text-lg">
                   {getMeasurementLabel(measurementType)} - динамика
                 </CardTitle>
                 <CardDescription>
@@ -627,31 +628,32 @@ export default function AnalyticsPage() {
               </CardHeader>
               <CardContent>
                 {measurementsLoading ? (
-                  <Skeleton className="h-72 w-full rounded-lg" />
+                  <Skeleton className="h-56 w-full rounded-lg sm:h-72" />
                 ) : measurementChartData.length === 0 ? (
-                  <div className="flex h-72 items-center justify-center">
-                    <p className="text-sm text-muted-foreground">
+                  <div className="flex h-56 items-center justify-center sm:h-72">
+                    <p className="text-center text-sm text-muted-foreground">
                       Нет данных для «{getMeasurementLabel(measurementType)}». Запишите первый замер выше.
                     </p>
                   </div>
                 ) : (
-                  <div className="h-72 w-full">
+                  <div className="-mx-3 h-56 sm:mx-0 sm:h-72">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart
                         data={measurementChartData}
-                        margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                        margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                         <XAxis
                           dataKey="date"
-                          className="text-xs"
-                          tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                          interval="preserveStartEnd"
+                          minTickGap={24}
                         />
                         <YAxis
                           domain={['auto', 'auto']}
-                          className="text-xs"
-                          tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                          tickFormatter={(value: number) => `${value} см`}
+                          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                          tickFormatter={(value: number) => `${value}`}
+                          width={36}
                         />
                         <Tooltip
                           contentStyle={{
@@ -667,8 +669,8 @@ export default function AnalyticsPage() {
                           dataKey="value"
                           stroke="hsl(var(--primary))"
                           strokeWidth={2}
-                          dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
-                          activeDot={{ r: 6 }}
+                          dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 3 }}
+                          activeDot={{ r: 5 }}
                         />
                       </LineChart>
                     </ResponsiveContainer>
@@ -681,7 +683,7 @@ export default function AnalyticsPage() {
             {measurementLogs && measurementLogs.length > 0 && (
               <Card className="border-border/50">
                 <CardHeader>
-                  <CardTitle>
+                  <CardTitle className="text-base sm:text-lg">
                     Последние записи - {getMeasurementLabel(measurementType)}
                   </CardTitle>
                 </CardHeader>
@@ -690,16 +692,16 @@ export default function AnalyticsPage() {
                     {measurementLogs.slice(-10).reverse().map((log) => (
                       <div
                         key={log.id}
-                        className="flex items-center justify-between rounded-lg border border-border/50 px-4 py-2"
+                        className="flex items-center justify-between gap-2 rounded-lg border border-border/50 px-3 py-2 sm:px-4"
                       >
-                        <span className="text-sm text-muted-foreground">
+                        <span className="truncate text-xs text-muted-foreground sm:text-sm">
                           {new Date(log.logged_at).toLocaleDateString('ru-RU', {
                             day: 'numeric',
                             month: 'long',
                             year: 'numeric',
                           })}
                         </span>
-                        <Badge variant="secondary">{log.value_cm} см</Badge>
+                        <Badge variant="secondary" className="shrink-0">{log.value_cm} см</Badge>
                       </div>
                     ))}
                   </div>
@@ -710,17 +712,17 @@ export default function AnalyticsPage() {
         </TabsContent>
 
         {/* Workouts tab */}
-        <TabsContent value="workouts" className="mt-6">
+        <TabsContent value="workouts" className="mt-4 sm:mt-6">
           {exercisesLoading ? (
             <Skeleton className="h-96 w-full rounded-lg" />
           ) : !trainedExercises || trainedExercises.length === 0 ? (
             <Card className="border-border/50">
-              <CardContent className="flex flex-col items-center justify-center gap-4 py-16">
-                <div className="flex size-16 items-center justify-center rounded-full bg-muted">
-                  <Dumbbell className="size-8 text-muted-foreground" />
+              <CardContent className="flex flex-col items-center justify-center gap-4 py-12 sm:py-16">
+                <div className="flex size-14 items-center justify-center rounded-full bg-muted sm:size-16">
+                  <Dumbbell className="size-7 text-muted-foreground sm:size-8" />
                 </div>
                 <div className="text-center">
-                  <h3 className="text-lg font-semibold">
+                  <h3 className="text-base font-semibold sm:text-lg">
                     Статистика тренировок
                   </h3>
                   <p className="mt-1 max-w-md text-sm text-muted-foreground">
@@ -734,11 +736,11 @@ export default function AnalyticsPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4 sm:gap-6">
               {/* Exercise selector */}
               <Card className="border-border/50">
                 <CardHeader>
-                  <CardTitle>Выберите упражнение</CardTitle>
+                  <CardTitle className="text-base sm:text-lg">Выберите упражнение</CardTitle>
                   <CardDescription>
                     Просматривайте прогресс по каждому упражнению
                   </CardDescription>
@@ -767,38 +769,39 @@ export default function AnalyticsPage() {
                   {/* Global progress chart */}
                   <Card className="border-border/50">
                     <CardHeader>
-                      <CardTitle>Прогресс по весу</CardTitle>
+                      <CardTitle className="text-base sm:text-lg">Прогресс по весу</CardTitle>
                       <CardDescription>
                         Лучший подход за каждую тренировку (вес, кг)
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
                       {progressLoading ? (
-                        <Skeleton className="h-72 w-full rounded-lg" />
+                        <Skeleton className="h-56 w-full rounded-lg sm:h-72" />
                       ) : progressChartData.length === 0 ? (
-                        <div className="flex h-72 items-center justify-center">
+                        <div className="flex h-56 items-center justify-center sm:h-72">
                           <p className="text-sm text-muted-foreground">
                             Нет данных по этому упражнению
                           </p>
                         </div>
                       ) : (
-                        <div className="h-72 w-full">
+                        <div className="-mx-3 h-56 sm:mx-0 sm:h-72">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart
                               data={progressChartData}
-                              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                              margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
                             >
                               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                               <XAxis
                                 dataKey="date"
-                                className="text-xs"
-                                tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                                interval="preserveStartEnd"
+                                minTickGap={24}
                               />
                               <YAxis
                                 domain={['auto', 'auto']}
-                                className="text-xs"
-                                tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                                tickFormatter={(v: number) => `${v} кг`}
+                                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                                tickFormatter={(v: number) => `${v}`}
+                                width={36}
                               />
                               <Tooltip
                                 contentStyle={{
@@ -818,8 +821,8 @@ export default function AnalyticsPage() {
                                 dataKey="weight"
                                 stroke="hsl(var(--primary))"
                                 strokeWidth={2}
-                                dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
-                                activeDot={{ r: 6 }}
+                                dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 3 }}
+                                activeDot={{ r: 5 }}
                                 name="weight"
                               />
                             </LineChart>
@@ -832,37 +835,38 @@ export default function AnalyticsPage() {
                   {/* Volume progress chart */}
                   <Card className="border-border/50">
                     <CardHeader>
-                      <CardTitle>Прогресс по объёму</CardTitle>
+                      <CardTitle className="text-base sm:text-lg">Прогресс по объёму</CardTitle>
                       <CardDescription>
                         Объём лучшего подхода (вес x повторения) за каждую тренировку
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
                       {progressLoading ? (
-                        <Skeleton className="h-72 w-full rounded-lg" />
+                        <Skeleton className="h-56 w-full rounded-lg sm:h-72" />
                       ) : progressChartData.length === 0 ? (
-                        <div className="flex h-72 items-center justify-center">
+                        <div className="flex h-56 items-center justify-center sm:h-72">
                           <p className="text-sm text-muted-foreground">
                             Нет данных
                           </p>
                         </div>
                       ) : (
-                        <div className="h-72 w-full">
+                        <div className="-mx-3 h-56 sm:mx-0 sm:h-72">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart
                               data={progressChartData}
-                              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                              margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
                             >
                               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                               <XAxis
                                 dataKey="date"
-                                className="text-xs"
-                                tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                                interval="preserveStartEnd"
+                                minTickGap={24}
                               />
                               <YAxis
                                 domain={['auto', 'auto']}
-                                className="text-xs"
-                                tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                                width={44}
                               />
                               <Tooltip
                                 contentStyle={{
@@ -878,8 +882,8 @@ export default function AnalyticsPage() {
                                 dataKey="volume"
                                 stroke="#ff0030"
                                 strokeWidth={2}
-                                dot={{ fill: '#ff0030', strokeWidth: 2, r: 4 }}
-                                activeDot={{ r: 6 }}
+                                dot={{ fill: '#ff0030', strokeWidth: 2, r: 3 }}
+                                activeDot={{ r: 5 }}
                               />
                             </LineChart>
                           </ResponsiveContainer>
@@ -895,17 +899,17 @@ export default function AnalyticsPage() {
         </TabsContent>
 
         {/* History tab */}
-        <TabsContent value="history" className="mt-6">
+        <TabsContent value="history" className="mt-4 sm:mt-6">
           {historyLoading ? (
             <Skeleton className="h-96 w-full rounded-lg" />
           ) : !completedSessions || completedSessions.length === 0 ? (
             <Card className="border-border/50">
-              <CardContent className="flex flex-col items-center justify-center gap-4 py-16">
-                <div className="flex size-16 items-center justify-center rounded-full bg-muted">
-                  <History className="size-8 text-muted-foreground" />
+              <CardContent className="flex flex-col items-center justify-center gap-4 py-12 sm:py-16">
+                <div className="flex size-14 items-center justify-center rounded-full bg-muted sm:size-16">
+                  <History className="size-7 text-muted-foreground sm:size-8" />
                 </div>
                 <div className="text-center">
-                  <h3 className="text-lg font-semibold">
+                  <h3 className="text-base font-semibold sm:text-lg">
                     История тренировок
                   </h3>
                   <p className="mt-1 max-w-md text-sm text-muted-foreground">
@@ -919,11 +923,11 @@ export default function AnalyticsPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4 sm:gap-6">
               {/* Session selector */}
               <Card className="border-border/50">
                 <CardHeader>
-                  <CardTitle>Выберите тренировку</CardTitle>
+                  <CardTitle className="text-base sm:text-lg">Выберите тренировку</CardTitle>
                   <CardDescription>
                     Просмотрите подходы по каждому упражнению в конкретной тренировке
                   </CardDescription>
@@ -958,7 +962,7 @@ export default function AnalyticsPage() {
               {selectedSession && (
                 <Card className="border-border/50">
                   <CardHeader>
-                    <CardTitle>Упражнения</CardTitle>
+                    <CardTitle className="text-base sm:text-lg">Упражнения</CardTitle>
                     <CardDescription>
                       {selectedSession.session_name} — {new Date(selectedSession.scheduled_date).toLocaleDateString('ru-RU', {
                         day: 'numeric',
@@ -987,38 +991,37 @@ export default function AnalyticsPage() {
               {selectedHistoryExerciseId && (
                 <Card className="border-border/50">
                   <CardHeader>
-                    <CardTitle>Объём по подходам</CardTitle>
+                    <CardTitle className="text-base sm:text-lg">Объём по подходам</CardTitle>
                     <CardDescription>
                       Вес × повторения (кг) для каждого подхода
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     {historyExerciseLoading ? (
-                      <Skeleton className="h-64 w-full rounded-lg" />
+                      <Skeleton className="h-52 w-full rounded-lg sm:h-64" />
                     ) : historySetsChartData.length === 0 ? (
-                      <div className="flex h-64 items-center justify-center">
+                      <div className="flex h-52 items-center justify-center sm:h-64">
                         <p className="text-sm text-muted-foreground">
                           Нет данных по подходам
                         </p>
                       </div>
                     ) : (
-                      <div className="h-64 w-full">
+                      <div className="-mx-3 h-52 sm:mx-0 sm:h-64">
                         <ResponsiveContainer width="100%" height="100%">
                           <LineChart
                             data={historySetsChartData}
-                            margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                            margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
                           >
                             <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                             <XAxis
                               dataKey="name"
-                              className="text-xs"
-                              tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
                             />
                             <YAxis
                               domain={['auto', 'auto']}
-                              className="text-xs"
-                              tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                              tickFormatter={(v: number) => `${v} кг`}
+                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                              tickFormatter={(v: number) => `${v}`}
+                              width={36}
                             />
                             <Tooltip
                               contentStyle={{
@@ -1034,8 +1037,8 @@ export default function AnalyticsPage() {
                               dataKey="volume"
                               stroke="#ff0030"
                               strokeWidth={2}
-                              dot={{ fill: '#ff0030', strokeWidth: 2, r: 4 }}
-                              activeDot={{ r: 6 }}
+                              dot={{ fill: '#ff0030', strokeWidth: 2, r: 3 }}
+                              activeDot={{ r: 5 }}
                             />
                           </LineChart>
                         </ResponsiveContainer>
@@ -1049,16 +1052,16 @@ export default function AnalyticsPage() {
         </TabsContent>
 
         {/* Nutrition tab */}
-        <TabsContent value="nutrition" className="mt-6">
-          <div className="flex flex-col gap-6">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <TabsContent value="nutrition" className="mt-4 sm:mt-6">
+          <div className="flex flex-col gap-4 sm:gap-6">
+            <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
               {nutritionSummaryLoading || nutritionPlansLoading
                 ? Array.from({ length: 4 }).map((_, index) => (
                     <Card key={index} className="border-border/50">
-                      <CardContent className="pt-6">
-                        <Skeleton className="h-5 w-24" />
-                        <Skeleton className="mt-4 h-8 w-28" />
-                        <Skeleton className="mt-4 h-2 w-full" />
+                      <CardContent className="pt-4 sm:pt-6">
+                        <Skeleton className="h-4 w-20 sm:h-5 sm:w-24" />
+                        <Skeleton className="mt-3 h-7 w-24 sm:mt-4 sm:h-8 sm:w-28" />
+                        <Skeleton className="mt-3 h-2 w-full sm:mt-4" />
                       </CardContent>
                     </Card>
                   ))
@@ -1070,22 +1073,22 @@ export default function AnalyticsPage() {
 
                     return (
                       <Card key={metric.label} className="border-border/50">
-                        <CardContent className="pt-6">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-sm text-muted-foreground">{metric.label}</p>
-                              <p className="mt-1 text-2xl font-bold">
+                        <CardContent className="pt-4 sm:pt-6">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-xs text-muted-foreground sm:text-sm">{metric.label}</p>
+                              <p className="mt-1 text-lg font-bold sm:text-2xl">
                                 {metric.current}
-                                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                                <span className="ml-1 text-xs font-normal text-muted-foreground sm:text-sm">
                                   / {metric.target} {metric.unit}
                                 </span>
                               </p>
                             </div>
-                            <div className="flex size-10 items-center justify-center rounded-full bg-primary/10">
-                              <Icon className="size-5 text-primary" />
+                            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 sm:size-10">
+                              <Icon className="size-4 text-primary sm:size-5" />
                             </div>
                           </div>
-                          <Progress value={percentage} className="mt-4 h-2" />
+                          <Progress value={percentage} className="mt-3 h-2 sm:mt-4" />
                           <p className="mt-2 text-xs text-muted-foreground">
                             {percentage}% дневной цели
                           </p>
@@ -1097,7 +1100,7 @@ export default function AnalyticsPage() {
 
             <Card className="border-border/50">
               <CardHeader>
-                <CardTitle>Питание сегодня</CardTitle>
+                <CardTitle className="text-base sm:text-lg">Питание сегодня</CardTitle>
                 <CardDescription>
                   {activeNutritionPlan
                     ? `Цели из активного плана: ${activeNutritionPlan.title}`
@@ -1107,10 +1110,10 @@ export default function AnalyticsPage() {
               <CardContent>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted">
                       <UtensilsCrossed className="size-5 text-muted-foreground" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-sm font-medium">
                         Записано приёмов пищи: {nutritionTotals.meals_logged}
                       </p>
@@ -1123,7 +1126,7 @@ export default function AnalyticsPage() {
                       </p>
                     </div>
                   </div>
-                  <Button variant="outline" asChild>
+                  <Button variant="outline" asChild className="w-full sm:w-auto">
                     <Link href="/nutrition">Открыть дневник питания</Link>
                   </Button>
                 </div>

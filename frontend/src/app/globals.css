@@ -137,6 +137,12 @@
       linear-gradient(115deg, rgb(0 0 2 / 46%) 0%, rgb(4 3 9 / 34%) 46%, rgb(0 0 2 / 56%) 100%),
       url("/marketing/coach-ai-bg.jpg") center / cover no-repeat,
       rgb(0 0 2);
+    background-attachment: fixed, fixed, fixed;
+    overscroll-behavior: none;
+  }
+  html {
+    overscroll-behavior: none;
+    background: rgb(0 0 2);
   }
   body::before,
   body::after {

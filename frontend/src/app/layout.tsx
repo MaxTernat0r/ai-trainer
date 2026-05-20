@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { QueryProvider } from "@/lib/providers/query-provider";
 import { ThemeProvider } from "@/lib/providers/theme-provider";
@@ -20,6 +20,14 @@ const matrixBursts = Array.from({ length: 12 }, (_, index) => index + 1);
 export const metadata: Metadata = {
   title: "Coach AI",
   description: "Адаптивная платформа для спортивного планирования с ИИ",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

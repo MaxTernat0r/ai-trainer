@@ -12,7 +12,6 @@ const PRIVATE_PAGES = [
   { path: '/workouts', name: 'workouts' },
   { path: '/nutrition', name: 'nutrition' },
   { path: '/chat', name: 'chat' },
-  { path: '/exercises', name: 'exercises' },
   { path: '/analytics', name: 'analytics' },
   { path: '/profile', name: 'profile' },
 ];
@@ -58,22 +57,5 @@ test.describe('Critical mobile interactions', () => {
     await expect(menuButton).toBeVisible();
     await menuButton.click();
     await expect(page.locator('[data-slot="sheet-content"]')).toBeVisible();
-  });
-
-  test('dashboard tab bar visible above safe area', async ({ page }) => {
-    await loginAsTestUser(page);
-    await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
-    const tabBar = page.locator('nav.fixed').filter({ hasText: 'Главная' }).first();
-    await expect(tabBar).toBeVisible();
-    const box = await tabBar.boundingBox();
-    expect(box).not.toBeNull();
-    if (box) {
-      const viewport = page.viewportSize();
-      expect(viewport).not.toBeNull();
-      if (viewport) {
-        expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
-      }
-    }
   });
 });

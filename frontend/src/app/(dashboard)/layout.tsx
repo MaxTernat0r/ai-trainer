@@ -9,7 +9,6 @@ import {
   Dumbbell,
   UtensilsCrossed,
   MessageSquare,
-  BookOpen,
   BarChart3,
   User,
   Menu,
@@ -29,12 +28,9 @@ const navItems = [
   { href: '/workouts', label: 'Тренировки', icon: Dumbbell },
   { href: '/nutrition', label: 'Питание', icon: UtensilsCrossed },
   { href: '/chat', label: 'Чат с тренером', icon: MessageSquare },
-  { href: '/exercises', label: 'Упражнения', icon: BookOpen },
   { href: '/analytics', label: 'Аналитика', icon: BarChart3 },
   { href: '/profile', label: 'Профиль', icon: User },
 ];
-
-const mobileNavItems = navItems.slice(0, 5);
 
 export default function DashboardLayout({
   children,
@@ -86,7 +82,7 @@ export default function DashboardLayout({
   }, [pathname]);
 
   return (
-    <div className="relative flex h-screen gap-2 overflow-hidden p-2 text-foreground sm:gap-3 sm:p-3">
+    <div className="relative flex h-dvh gap-2 overflow-hidden p-2 text-foreground sm:gap-3 sm:p-3">
       {/* Mobile overlay */}
       {sidebarOpen && isMobile && (
         <div
@@ -246,44 +242,20 @@ export default function DashboardLayout({
         <main
           ref={contentRef}
           className={cn(
-            'no-scrollbar flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0',
-            isChatPage && 'md:overflow-hidden'
+            'no-scrollbar flex-1 overscroll-contain',
+            isChatPage ? 'overflow-hidden' : 'overflow-y-auto'
           )}
         >
           <div
             className={cn(
               'mx-auto max-w-[1500px] p-1 sm:p-0',
-              isChatPage && 'md:h-full md:min-h-0'
+              isChatPage && 'h-full min-h-0'
             )}
           >
             {children}
           </div>
         </main>
       </div>
-
-      {/* Mobile bottom tab bar */}
-      <nav className="cockpit-panel fixed inset-x-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-50 rounded-lg md:hidden">
-        <div className="flex items-center justify-around py-2">
-          {mobileNavItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex min-w-0 flex-1 flex-col items-center gap-1 rounded-md px-1 py-1 text-[0.68rem] font-semibold transition-colors',
-                  isActive
-                    ? 'bg-primary/12 text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <item.icon className="size-5" />
-                <span className="max-w-full truncate">{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
     </div>
   );
 }
