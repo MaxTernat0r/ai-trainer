@@ -7,13 +7,22 @@
 ставит is_verified=True, заполняет профиль для прохождения onboarding gate.
 
 Идемпотентен.
+
+ЗАЩИТА ОТ ЗАПУСКА НА ПРОДЕ:
+    Скрипт отказывается работать если settings.DEBUG=False, кроме случая
+    когда задана переменная ALLOW_TEST_SEED=1. Это нужно чтобы случайный
+    `docker compose run --rm backend python -m scripts.seed_test_user` на
+    production VPS не создал юзера с известным паролем.
 """
 import asyncio
+import os
+import sys
 from datetime import date
 
 from sqlalchemy import select
 
 import app.db.base  # noqa: F401 — register all models for relationship resolution
+from app.core.config import settings
 from app.core.security import hash_password
 from app.db.session import async_session_factory
 from app.models.profile import UserProfile
@@ -24,6 +33,14 @@ TEST_PASSWORD = "mobile-test-pass-123"
 
 
 async def main() -> None:
+    if not settings.DEBUG and os.getenv("ALLOW_TEST_SEED") != "1":
+        print(
+            "Refusing to seed test user: settings.DEBUG=False and ALLOW_TEST_SEED!=1.\n"
+            "This script is for local Playwright tests only. Set ALLOW_TEST_SEED=1 to override.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
     async with async_session_factory() as session:
         result = await session.execute(select(User).where(User.email == TEST_EMAIL))
         user = result.scalar_one_or_none()
