@@ -750,7 +750,3 @@
     font-size: 16px;
   }
 }
-
-[data-auth-form-scroll] [data-slot="input"] {
-  font-size: 16px;
-}
