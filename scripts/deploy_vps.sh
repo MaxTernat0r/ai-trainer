@@ -24,7 +24,7 @@ fi
 
 chmod 600 .env.prod
 
-ssh "${SSH_ARGS[@]}" "$REMOTE" "mkdir -p '$REMOTE_DIR'"
+ssh ${SSH_ARGS[@]+"${SSH_ARGS[@]}"} "$REMOTE" "mkdir -p '$REMOTE_DIR'"
 
 rsync -az --delete \
   -e "$RSYNC_SSH" \
@@ -42,7 +42,7 @@ rsync -az --delete \
 
 rsync -az -e "$RSYNC_SSH" .env.prod "$REMOTE:$REMOTE_DIR/.env"
 
-ssh "${SSH_ARGS[@]}" "$REMOTE" "REMOTE_DIR='$REMOTE_DIR' bash -s" <<'REMOTE_SCRIPT'
+ssh ${SSH_ARGS[@]+"${SSH_ARGS[@]}"} "$REMOTE" "REMOTE_DIR='$REMOTE_DIR' bash -s" <<'REMOTE_SCRIPT'
 set -Eeuo pipefail
 
 cd "$REMOTE_DIR"
