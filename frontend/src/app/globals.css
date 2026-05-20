@@ -726,6 +726,10 @@
     animation-duration: 30s;
   }
 
+  .global-matrix-field {
+    display: none;
+  }
+
   .cockpit-panel,
   .glass-lane {
     backdrop-filter: none;
