@@ -58,7 +58,10 @@ export function useLogSet() {
   const queryClient = useQueryClient();
 
   return useMutation<ExerciseSet, Error, LogSetRequest & { planId: string }>({
-    mutationFn: ({ planId: _planId, ...data }) => workoutsApi.logSet(data),
+    mutationFn: ({ planId, ...data }) => {
+      void planId;
+      return workoutsApi.logSet(data);
+    },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.workouts.plan(variables.planId),

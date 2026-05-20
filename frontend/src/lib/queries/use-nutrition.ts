@@ -50,7 +50,10 @@ export function useLogFood() {
   const queryClient = useQueryClient();
 
   return useMutation<NutritionLog, Error, LogFoodRequest & { date: string }>({
-    mutationFn: ({ date: _date, ...data }) => nutritionApi.logFood(data),
+    mutationFn: ({ date, ...data }) => {
+      void date;
+      return nutritionApi.logFood(data);
+    },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.nutrition.daily(variables.date),

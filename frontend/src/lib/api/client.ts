@@ -1,7 +1,47 @@
 import ky from 'ky';
 import { useAuthStore } from '@/lib/stores/auth-store';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const DEFAULT_API_BASE_URL = 'http://localhost:8000';
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
+}
+
+function isIpv4Host(hostname: string): boolean {
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname);
+}
+
+function resolveApiBaseUrl(): string {
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim() || DEFAULT_API_BASE_URL;
+
+  if (typeof window === 'undefined') {
+    return configuredUrl;
+  }
+
+  const current = window.location;
+
+  try {
+    const apiUrl = new URL(configuredUrl);
+
+    if (isLoopbackHost(apiUrl.hostname) && !isLoopbackHost(current.hostname)) {
+      apiUrl.hostname = current.hostname;
+      apiUrl.protocol = current.protocol;
+      return apiUrl.origin;
+    }
+
+    if (isIpv4Host(current.hostname) && !isLoopbackHost(current.hostname)) {
+      return current.origin;
+    }
+
+    if (current.protocol === 'http:' && apiUrl.protocol === 'https:' && apiUrl.hostname === current.hostname) {
+      return current.origin;
+    }
+
+    return apiUrl.origin;
+  } catch {
+    return current.origin;
+  }
+}
 
 let refreshPromise: Promise<string> | null = null;
 
@@ -20,8 +60,8 @@ async function refreshAccessToken(): Promise<string> {
 }
 
 export const apiClient = ky.create({
-  prefixUrl: `${API_BASE_URL}/api/v1`,
-  timeout: 30_000,
+  prefixUrl: `${resolveApiBaseUrl()}/api/v1`,
+  timeout: 90_000,
   credentials: 'include',
   retry: { limit: 1, methods: ['get'] },
   hooks: {
