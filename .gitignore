@@ -47,3 +47,9 @@ htmlcov/
 
 # Claude
 .claude/
+
+# Personal notes (not source of truth)
+hod_raboty.md
+reflection_ip_filled.md
+reflection_ip_filled.txt
+*.docx
