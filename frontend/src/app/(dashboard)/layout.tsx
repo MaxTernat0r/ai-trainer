@@ -246,16 +246,14 @@ export default function DashboardLayout({
         <main
           ref={contentRef}
           className={cn(
-            'no-scrollbar flex-1',
-            isChatPage
-              ? 'overflow-hidden pb-0'
-              : 'overflow-y-auto pb-24 md:pb-0'
+            'no-scrollbar flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0',
+            isChatPage && 'md:overflow-hidden'
           )}
         >
           <div
             className={cn(
               'mx-auto max-w-[1500px] p-1 sm:p-0',
-              isChatPage && 'h-full min-h-0'
+              isChatPage && 'md:h-full md:min-h-0'
             )}
           >
             {children}
@@ -264,7 +262,7 @@ export default function DashboardLayout({
       </div>
 
       {/* Mobile bottom tab bar */}
-      <nav className="cockpit-panel fixed inset-x-2 bottom-2 z-50 rounded-lg md:hidden">
+      <nav className="cockpit-panel fixed inset-x-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-50 rounded-lg md:hidden">
         <div className="flex items-center justify-around py-2">
           {mobileNavItems.map((item) => {
             const isActive = pathname === item.href;
