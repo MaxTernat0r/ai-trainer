@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     # App
     APP_NAME: str = "AI Trainer"
     DEBUG: bool = False
+    ENABLE_DOCS: bool = False
     API_V1_PREFIX: str = "/api/v1"
     FRONTEND_URL: str = "http://localhost:3000"
 

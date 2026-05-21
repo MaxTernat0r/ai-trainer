@@ -36,10 +36,14 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    docs_enabled = settings.ENABLE_DOCS or settings.DEBUG
     app = FastAPI(
         title=settings.APP_NAME,
         version="1.0.0",
         lifespan=lifespan,
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
     )
 
     app.add_middleware(
