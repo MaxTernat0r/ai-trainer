@@ -132,7 +132,9 @@
   --sidebar-ring: oklch(0.62 0.24 22);
 }
 
-.theme-aurora {
+.theme-aurora,
+.dark.theme-aurora,
+html.theme-aurora {
   --brand-accent: 4 200 190;
   --brand-deep: 4 200 190;
   --brand-shade: 5 138 132;
