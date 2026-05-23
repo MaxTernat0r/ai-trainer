@@ -22,7 +22,7 @@ from app.services.ai.calorie_calculator import (
     calculate_macro_targets,
     calculate_tdee,
 )
-from app.services.ai.context_builder import build_user_context
+from app.services.ai.context_builder import build_user_context, extract_health_restrictions
 from app.services.ai.provider import generate_json_completion, get_configured_ai_provider
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ NUTRITION_SYSTEM_PROMPT = """\
 1. Строго соблюдай указанную калорийность и распределение макронутриентов.
 2. НИКОГДА не используй продукты, на которые у клиента аллергия или непереносимость.
 3. По возможности исключай нелюбимые продукты клиента.
-4. Учитывай медицинские ограничения.
+4. СТРОГО учитывай медицинские ограничения и травмы. Если у пользователя есть ограничения по здоровью (диабет, гипертония, болезни ЖКТ, аллергии и т.д.) — адаптируй продукты, способы приготовления, размер порций и распределение приёмов пищи под них. Не предлагай продукты или схемы, которые могут навредить.
 5. Предлагай разнообразные, простые и доступные продукты.
 6. Указывай количество каждого продукта в граммах.
 7. Для каждого продукта указывай точное содержание калорий и БЖУ на 100г.
@@ -319,9 +319,18 @@ async def generate_nutrition_plan(
 
         # Build user context
         user_context = await build_user_context(user, db)
+        health_block = await extract_health_restrictions(user, db)
 
         # Build dietary restrictions note
         dietary_notes = ""
+        if health_block:
+            dietary_notes += (
+                "\n\n=============================================="
+                "\nВАЖНО — МЕДИЦИНСКИЕ ОГРАНИЧЕНИЯ И ТРАВМЫ:"
+                f"\n{health_block}"
+                "\nСТРОГО адаптируй продукты и приёмы пищи под эти ограничения."
+                "\n=============================================="
+            )
         if profile.food_allergies:
             dietary_notes += f"\n\nВАЖНО — АЛЛЕРГИИ И НЕПЕРЕНОСИМОСТИ (ИСКЛЮЧИТЬ ИЗ ПЛАНА):\n{profile.food_allergies}"
         if profile.disliked_foods:

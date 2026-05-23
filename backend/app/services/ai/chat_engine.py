@@ -25,7 +25,41 @@ CHAT_SYSTEM_PROMPT = """\
 Отыгрывай его роль, отвечай как человек.
 """
 
+TITLE_SYSTEM_PROMPT = (
+    "Ты помогаешь именовать чат с фитнес-тренером. "
+    "На основе первого сообщения пользователя придумай очень короткий заголовок "
+    "на русском языке: 3-6 слов, без кавычек, без точки в конце, в именительном падеже. "
+    "Только сам заголовок, никакого вступления."
+)
+
 MAX_HISTORY_MESSAGES = 20
+
+
+async def generate_conversation_title(first_message: str) -> str:
+    """Generate a short title (3-6 words, Russian) for a conversation based on
+    the first user message. Falls back to a truncation of the message if AI is
+    not configured or generation fails."""
+    fallback = first_message.strip().split("\n", 1)[0][:60].strip() or "Новый диалог"
+    if not get_configured_ai_provider():
+        return fallback
+    try:
+        accumulated = ""
+        async for chunk in stream_chat_completion(
+            messages=[
+                {"role": "system", "content": TITLE_SYSTEM_PROMPT},
+                {"role": "user", "content": first_message[:1000]},
+            ],
+            temperature=0.3,
+            max_tokens=40,
+        ):
+            accumulated += chunk
+        title = accumulated.strip().strip('"').strip("'").rstrip(".")
+        # collapse whitespace, hard cap
+        title = " ".join(title.split())[:80]
+        return title or fallback
+    except Exception:
+        logger.warning("Failed to generate conversation title", exc_info=True)
+        return fallback
 
 
 def _build_fallback_chat_response(message: str) -> str:

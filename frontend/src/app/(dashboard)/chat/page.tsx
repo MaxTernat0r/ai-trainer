@@ -15,7 +15,6 @@ import {
   PanelLeft,
   Loader2,
   Menu,
-  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -33,7 +32,6 @@ import {
   useConversations,
   useConversation,
   useCreateConversation,
-  useDeleteConversation,
 } from '@/lib/queries/use-chat';
 import { useChatStream } from '@/lib/hooks/use-chat-stream';
 import type { ChatMessage } from '@/types/chat';
@@ -67,7 +65,6 @@ export default function ChatPage() {
 
   // Mutations
   const createConversation = useCreateConversation();
-  const deleteConversation = useDeleteConversation();
 
   // Chat streaming
   const { streamMessage, isStreaming, sendMessage: sendStreamMessage } = useChatStream();
@@ -85,12 +82,17 @@ export default function ChatPage() {
     const result = [...base];
 
     if (pendingUserMessage) {
-      result.push({
-        id: '__pending_user__',
-        role: 'user' as const,
-        content: pendingUserMessage,
-        created_at: new Date().toISOString(),
-      });
+      const lastUserInBase = [...base].reverse().find((m) => m.role === 'user');
+      const alreadyShown =
+        lastUserInBase?.content.trim() === pendingUserMessage.trim();
+      if (!alreadyShown) {
+        result.push({
+          id: '__pending_user__',
+          role: 'user' as const,
+          content: pendingUserMessage,
+          created_at: new Date().toISOString(),
+        });
+      }
     }
 
     if (isStreaming) {
@@ -154,21 +156,6 @@ export default function ChatPage() {
       },
       onError: () => {
         toast.error('Не удалось создать диалог');
-      },
-    });
-  };
-
-  const handleDeleteConversation = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    deleteConversation.mutate(id, {
-      onSuccess: () => {
-        if (activeConversationId === id) {
-          setActiveConversationId(undefined);
-        }
-        toast.success('Диалог удалён');
-      },
-      onError: () => {
-        toast.error('Не удалось удалить диалог');
       },
     });
   };
@@ -257,14 +244,6 @@ export default function ChatPage() {
                     {new Date(conv.created_at).toLocaleDateString('ru-RU')}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  className="shrink-0 opacity-60 transition-opacity hover:opacity-100"
-                  onClick={(e) => handleDeleteConversation(conv.id, e)}
-                >
-                  <Trash2 className="size-3 text-muted-foreground" />
-                </Button>
               </div>
             ))
           ) : (
@@ -360,14 +339,6 @@ export default function ChatPage() {
                       {new Date(conv.created_at).toLocaleDateString('ru-RU')}
                     </p>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    className="pointer-events-none shrink-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100"
-                    onClick={(e) => handleDeleteConversation(conv.id, e)}
-                  >
-                    <Trash2 className="size-3 text-muted-foreground" />
-                  </Button>
                 </div>
               ))
             ) : (

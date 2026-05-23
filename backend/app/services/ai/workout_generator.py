@@ -16,7 +16,7 @@ from app.models.exercise import Exercise
 from app.models.user import User
 from app.models.workout import WorkoutExercise, WorkoutPlan, WorkoutSession
 from app.schemas.workout import GenerateWorkoutRequest, WorkoutPlanRead
-from app.services.ai.context_builder import build_user_context
+from app.services.ai.context_builder import build_user_context, extract_health_restrictions
 from app.services.ai.provider import generate_json_completion, get_configured_ai_provider
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ WORKOUT_SYSTEM_PROMPT = """\
 ПРАВИЛА:
 1. Подбирай упражнения ТОЛЬКО из предоставленного списка доступных упражнений (используй их exercise_id).
 2. Учитывай уровень подготовки при выборе количества подходов и повторений.
-3. НИКОГДА не включай упражнения, которые противоречат медицинским ограничениям.
+3. НИКОГДА не включай упражнения, которые противоречат медицинским ограничениям или травмам пользователя. При травмах ног и нижних конечностей — исключи бег, прыжки, скакалку, выпады с прыжком, плиометрику, приседания и любую ударную нагрузку на ноги. При травмах спины — исключи становую тягу, наклоны со штангой, тяжёлые приседания. При травмах плеча — исключи жимы над головой и подтягивания. При сомнениях — выбирай безопасную альтернативу или замени на упражнение для другой группы мышц.
 4. Учитывай доступное оборудование.
 5. Обеспечь прогрессивную нагрузку на протяжении программы.
 6. Каждая тренировка должна включать разминочные и основные упражнения.
@@ -297,6 +297,7 @@ async def generate_workout_plan(
     try:
         # Build user context
         user_context = await build_user_context(user, db)
+        health_block = await extract_health_restrictions(user, db)
 
         # Load available exercises
         available_exercises = await _load_available_exercises(db)
@@ -308,8 +309,20 @@ async def generate_workout_plan(
         valid_exercise_ids = _build_valid_exercise_ids(available_exercises)
 
         # Build the user message with all context
+        restrictions_section = ""
+        if health_block:
+            restrictions_section = (
+                "\n\n"
+                "==============================================\n"
+                "ВАЖНО — МЕДИЦИНСКИЕ ОГРАНИЧЕНИЯ И ТРАВМЫ:\n"
+                f"{health_block}\n"
+                "СТРОГО учитывай эти ограничения при подборе упражнений. "
+                "ИСКЛЮЧИ любые движения, которые могут травмировать или нагружать ограниченные зоны (см. правило 3 системы).\n"
+                "=============================================="
+            )
+
         user_message = f"""\
-{user_context}
+{user_context}{restrictions_section}
 
 Составь ему тренировочную программу со следующими параметрами:
 - Длительность: {request.weeks} недель

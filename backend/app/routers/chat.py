@@ -139,8 +139,10 @@ async def send_message(
     db.add(user_msg)
     await db.flush()
 
+    should_generate_title = conv.title is None
+
     # Generate AI response (streaming)
-    from app.services.ai.chat_engine import generate_chat_response
+    from app.services.ai.chat_engine import generate_chat_response, generate_conversation_title
 
     async def event_stream():
         full_response = ""
@@ -164,6 +166,13 @@ async def send_message(
             content=full_response,
         )
         db.add(assistant_msg)
+
+        if should_generate_title:
+            try:
+                conv.title = await generate_conversation_title(data.content)
+            except Exception:
+                logger.warning("Failed to set conversation title", exc_info=True)
+
         await db.commit()
 
         yield "data: [DONE]\n\n"

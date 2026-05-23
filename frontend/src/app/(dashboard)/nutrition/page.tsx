@@ -220,6 +220,7 @@ export default function NutritionPage() {
   const [generateSheetOpen, setGenerateSheetOpen] = useState(false);
   const [recognitionResult, setRecognitionResult] = useState<RecognizedFoodItem[] | null>(null);
   const [recognitionSheetOpen, setRecognitionSheetOpen] = useState(false);
+  const [addedRecognizedIndices, setAddedRecognizedIndices] = useState<Set<number>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Food form state
@@ -353,6 +354,7 @@ export default function NutritionPage() {
       onSuccess: (result) => {
         if (result.is_food && result.items.length > 0) {
           setRecognitionResult(result.items);
+          setAddedRecognizedIndices(new Set());
           setRecognitionSheetOpen(true);
         } else {
           toast.error('Не удалось распознать еду на фото');
@@ -367,7 +369,7 @@ export default function NutritionPage() {
     e.target.value = '';
   };
 
-  const handleAddRecognizedItem = (item: RecognizedFoodItem) => {
+  const handleAddRecognizedItem = (item: RecognizedFoodItem, idx: number) => {
     logFoodMutation.mutate(
       {
         food_name: item.food_name,
@@ -382,8 +384,7 @@ export default function NutritionPage() {
       {
         onSuccess: () => {
           toast.success(`${item.food_name} добавлен`);
-          setRecognitionSheetOpen(false);
-          setRecognitionResult(null);
+          setAddedRecognizedIndices((prev) => new Set(prev).add(idx));
         },
         onError: () => {
           toast.error('Не удалось добавить продукт');
@@ -846,7 +847,16 @@ export default function NutritionPage() {
       </Sheet>
 
       {/* Recognition results sheet */}
-      <Sheet open={recognitionSheetOpen} onOpenChange={setRecognitionSheetOpen}>
+      <Sheet
+        open={recognitionSheetOpen}
+        onOpenChange={(open) => {
+          setRecognitionSheetOpen(open);
+          if (!open) {
+            setRecognitionResult(null);
+            setAddedRecognizedIndices(new Set());
+          }
+        }}
+      >
         <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Распознанные продукты</SheetTitle>
@@ -855,30 +865,36 @@ export default function NutritionPage() {
             </SheetDescription>
           </SheetHeader>
           <div className="flex flex-col gap-3 p-4">
-            {recognitionResult?.map((item, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between rounded-lg border border-border p-3"
-              >
-                <div>
-                  <p className="text-sm font-medium">{item.food_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {item.portion_grams}г | {item.calories} ккал | Б {item.protein_g}г | Ж {item.fat_g}г | У {item.carbs_g}г
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Точность: {Math.round(item.confidence_score * 100)}%
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleAddRecognizedItem(item)}
-                  disabled={logFoodMutation.isPending}
+            {recognitionResult?.map((item, idx) => {
+              const isAdded = addedRecognizedIndices.has(idx);
+              return (
+                <div
+                  key={idx}
+                  className={cn(
+                    'flex items-center justify-between rounded-lg border border-border p-3 transition-opacity',
+                    isAdded && 'opacity-60'
+                  )}
                 >
-                  <Check className="size-4" />
-                </Button>
-              </div>
-            ))}
+                  <div>
+                    <p className="text-sm font-medium">{item.food_name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {item.portion_grams}г | {item.calories} ккал | Б {item.protein_g}г | Ж {item.fat_g}г | У {item.carbs_g}г
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Точность: {Math.round(item.confidence_score * 100)}%
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleAddRecognizedItem(item, idx)}
+                    disabled={logFoodMutation.isPending || isAdded}
+                  >
+                    <Check className={cn('size-4', isAdded && 'text-emerald-400')} />
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         </SheetContent>
       </Sheet>

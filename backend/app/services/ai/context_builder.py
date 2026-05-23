@@ -121,3 +121,30 @@ async def build_user_context(user: User, db: AsyncSession) -> str:
         lines.append(f"Предпочитает {profile.meals_per_day} приёмов пищи в день.")
 
     return "\n".join(lines)
+
+
+async def extract_health_restrictions(user: User, db: AsyncSession) -> str | None:
+    """Return a formatted block of medical restrictions and custom health notes,
+    or None if the user has no restrictions on file. Output is intended to be
+    injected into AI generator prompts as a high-prominence section.
+    """
+    result = await db.execute(
+        select(UserProfile).where(UserProfile.user_id == user.id)
+    )
+    profile = result.scalar_one_or_none()
+    if not profile:
+        return None
+
+    parts: list[str] = []
+    restrictions = []
+    for umr in profile.medical_restrictions:
+        r = umr.restriction
+        restrictions.append(r.description or r.name)
+    if restrictions:
+        parts.append("Медицинские ограничения: " + ", ".join(restrictions))
+    if profile.custom_health_notes:
+        parts.append(f"Заметки о здоровье от пользователя: {profile.custom_health_notes}")
+
+    if not parts:
+        return None
+    return "\n".join(parts)
