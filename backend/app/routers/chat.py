@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
@@ -137,9 +137,17 @@ async def send_message(
         content=data.content,
     )
     db.add(user_msg)
-    await db.flush()
 
-    should_generate_title = conv.title is None
+    should_generate_title = conv.title is None or conv.title.strip() == ""
+    if should_generate_title:
+        fallback_title = data.content.strip().split("\n", 1)[0][:60].strip() or "Новый диалог"
+        await db.execute(
+            update(ChatConversation)
+            .where(ChatConversation.id == conv.id)
+            .values(title=fallback_title)
+        )
+
+    await db.flush()
 
     # Generate AI response (streaming)
     from app.services.ai.chat_engine import generate_chat_response, generate_conversation_title
@@ -169,7 +177,13 @@ async def send_message(
 
         if should_generate_title:
             try:
-                conv.title = await generate_conversation_title(data.content)
+                new_title = await generate_conversation_title(data.content)
+                if new_title:
+                    await db.execute(
+                        update(ChatConversation)
+                        .where(ChatConversation.id == conv.id)
+                        .values(title=new_title)
+                    )
             except Exception:
                 logger.warning("Failed to set conversation title", exc_info=True)
 
