@@ -59,6 +59,12 @@ function getMealLabel(type: string): string {
   return MEAL_TYPES.find((m) => m.value === type)?.label ?? type;
 }
 
+function fmt1(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return '0';
+  const rounded = Math.round(n * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
 interface MealSection {
   name: string;
   type: string;
@@ -156,13 +162,13 @@ function NutrientRing({
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <Icon className={`size-4 mb-0.5 ${iconColorClass}`} />
-          <span className="text-sm font-bold">{current}</span>
+          <span className="text-sm font-bold">{fmt1(current)}</span>
         </div>
       </div>
       <div className="text-center">
         <p className="text-xs font-medium">{label}</p>
         <p className="text-xs text-muted-foreground">
-          из {target} {unit}
+          из {fmt1(target)} {unit}
         </p>
       </div>
     </div>
@@ -221,6 +227,8 @@ export default function NutritionPage() {
   const [recognitionResult, setRecognitionResult] = useState<RecognizedFoodItem[] | null>(null);
   const [recognitionSheetOpen, setRecognitionSheetOpen] = useState(false);
   const [addedRecognizedIndices, setAddedRecognizedIndices] = useState<Set<number>>(new Set());
+  const [photoMealSheetOpen, setPhotoMealSheetOpen] = useState(false);
+  const [recognitionMealType, setRecognitionMealType] = useState<string>('snack');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Food form state
@@ -343,7 +351,14 @@ export default function NutritionPage() {
   };
 
   const handlePhotoRecognize = () => {
-    fileInputRef.current?.click();
+    setPhotoMealSheetOpen(true);
+  };
+
+  const handlePhotoMealPicked = (mealType: string) => {
+    setRecognitionMealType(mealType);
+    setPhotoMealSheetOpen(false);
+    // Defer click so the sheet has a chance to close before the OS picker opens
+    setTimeout(() => fileInputRef.current?.click(), 50);
   };
 
   const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -373,7 +388,7 @@ export default function NutritionPage() {
     logFoodMutation.mutate(
       {
         food_name: item.food_name,
-        meal_type: 'snack',
+        meal_type: recognitionMealType,
         quantity_g: item.portion_grams,
         calories: item.calories,
         protein_g: item.protein_g,
@@ -476,7 +491,7 @@ export default function NutritionPage() {
         <div className="flex items-center justify-center">
           <Badge variant="secondary" className="gap-1.5">
             <Sparkles className="size-3" />
-            План: {activePlan.title} ({activePlan.daily_calories} ккал)
+            План: {activePlan.title} ({fmt1(activePlan.daily_calories)} ккал)
           </Badge>
         </div>
       )}
@@ -487,7 +502,7 @@ export default function NutritionPage() {
           <h2 className="text-lg font-semibold">Мой план</h2>
           {fullPlan.meals.map((meal) => {
             const mealCalories = meal.items?.reduce((sum, item) => {
-              return sum + Math.round((item.food_item.calories_per_100g * item.quantity_g) / 100);
+              return sum + (item.food_item.calories_per_100g * item.quantity_g) / 100;
             }, 0) ?? 0;
             return (
             <Card key={meal.id} className="border-border/50">
@@ -500,7 +515,7 @@ export default function NutritionPage() {
                     <CardTitle className="text-base">{meal.name}</CardTitle>
                   </div>
                   <Badge variant="secondary" className="text-xs">
-                    {mealCalories} ккал
+                    {fmt1(mealCalories)} ккал
                   </Badge>
                 </div>
               </CardHeader>
@@ -510,10 +525,10 @@ export default function NutritionPage() {
                     {meal.items.map((item, idx) => {
                       const qty = item.quantity_g;
                       const food = item.food_item;
-                      const cal = Math.round((food.calories_per_100g * qty) / 100);
-                      const prot = Math.round((food.protein_per_100g * qty) / 100);
-                      const fat = Math.round((food.fat_per_100g * qty) / 100);
-                      const carbs = Math.round((food.carbs_per_100g * qty) / 100);
+                      const cal = (food.calories_per_100g * qty) / 100;
+                      const prot = (food.protein_per_100g * qty) / 100;
+                      const fat = (food.fat_per_100g * qty) / 100;
+                      const carbs = (food.carbs_per_100g * qty) / 100;
                       return (
                         <div key={item.id}>
                           {idx > 0 && <Separator className="mb-2" />}
@@ -521,11 +536,11 @@ export default function NutritionPage() {
                             <div>
                               <p className="text-sm font-medium">{food.name_ru || food.name}</p>
                               <p className="text-xs text-muted-foreground">
-                                {qty} г | Б {prot}г | Ж {fat}г | У {carbs}г
+                                {fmt1(qty)} г | Б {fmt1(prot)}г | Ж {fmt1(fat)}г | У {fmt1(carbs)}г
                               </p>
                             </div>
                             <span className="text-sm font-medium text-muted-foreground">
-                              {cal} ккал
+                              {fmt1(cal)} ккал
                             </span>
                           </div>
                         </div>
@@ -636,7 +651,7 @@ export default function NutritionPage() {
                     </div>
                   </div>
                   <Badge variant="secondary" className="text-sm">
-                    {meal.totalCalories} ккал
+                    {fmt1(meal.totalCalories)} ккал
                   </Badge>
                 </div>
               </CardHeader>
@@ -650,11 +665,11 @@ export default function NutritionPage() {
                           <div>
                             <p className="text-sm font-medium">{item.food_name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {item.quantity_g} г | Б {item.protein_g}г | Ж {item.fat_g}г | У {item.carbs_g}г
+                              {fmt1(item.quantity_g)} г | Б {fmt1(item.protein_g)}г | Ж {fmt1(item.fat_g)}г | У {fmt1(item.carbs_g)}г
                             </p>
                           </div>
                           <span className="text-sm font-medium text-muted-foreground">
-                            {item.calories} ккал
+                            {fmt1(item.calories)} ккал
                           </span>
                         </div>
                       </div>
@@ -690,36 +705,36 @@ export default function NutritionPage() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <div className="rounded-lg border border-[#712031]/45 bg-white/[0.035] p-3 text-center">
+              <div className="rounded-lg border border-[rgb(var(--theme-shade-rgb)/45%)] bg-white/[0.035] p-3 text-center">
                 <p className="text-lg font-bold text-primary">
-                  {summary.total_calories}
+                  {fmt1(summary.total_calories)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  / {targets.calories} ккал
+                  / {fmt1(targets.calories)} ккал
                 </p>
               </div>
-              <div className="rounded-lg border border-[#712031]/45 bg-white/[0.035] p-3 text-center">
+              <div className="rounded-lg border border-[rgb(var(--theme-shade-rgb)/45%)] bg-white/[0.035] p-3 text-center">
                 <p className="text-lg font-bold text-[#f5e7ea]">
-                  {summary.total_protein_g}г
+                  {fmt1(summary.total_protein_g)}г
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  / {targets.protein}г белка
+                  / {fmt1(targets.protein)}г белка
                 </p>
               </div>
-              <div className="rounded-lg border border-[#712031]/45 bg-white/[0.035] p-3 text-center">
+              <div className="rounded-lg border border-[rgb(var(--theme-shade-rgb)/45%)] bg-white/[0.035] p-3 text-center">
                 <p className="text-lg font-bold text-muted-foreground">
-                  {summary.total_fat_g}г
+                  {fmt1(summary.total_fat_g)}г
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  / {targets.fat}г жиров
+                  / {fmt1(targets.fat)}г жиров
                 </p>
               </div>
-              <div className="rounded-lg border border-[#712031]/45 bg-white/[0.035] p-3 text-center">
+              <div className="rounded-lg border border-[rgb(var(--theme-shade-rgb)/45%)] bg-white/[0.035] p-3 text-center">
                 <p className="text-lg font-bold text-primary">
-                  {summary.total_carbs_g}г
+                  {fmt1(summary.total_carbs_g)}г
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  / {targets.carbs}г углеводов
+                  / {fmt1(targets.carbs)}г углеводов
                 </p>
               </div>
             </div>
@@ -861,7 +876,7 @@ export default function NutritionPage() {
           <SheetHeader>
             <SheetTitle>Распознанные продукты</SheetTitle>
             <SheetDescription>
-              Нажмите на продукт, чтобы добавить его в журнал
+              Запишутся в: {getMealLabel(recognitionMealType)}. Нажмите на продукт, чтобы добавить его в журнал.
             </SheetDescription>
           </SheetHeader>
           <div className="flex flex-col gap-3 p-4">
@@ -878,7 +893,7 @@ export default function NutritionPage() {
                   <div>
                     <p className="text-sm font-medium">{item.food_name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {item.portion_grams}г | {item.calories} ккал | Б {item.protein_g}г | Ж {item.fat_g}г | У {item.carbs_g}г
+                      {fmt1(item.portion_grams)}г | {fmt1(item.calories)} ккал | Б {fmt1(item.protein_g)}г | Ж {fmt1(item.fat_g)}г | У {fmt1(item.carbs_g)}г
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Точность: {Math.round(item.confidence_score * 100)}%
@@ -890,7 +905,11 @@ export default function NutritionPage() {
                     onClick={() => handleAddRecognizedItem(item, idx)}
                     disabled={logFoodMutation.isPending || isAdded}
                   >
-                    <Check className={cn('size-4', isAdded && 'text-emerald-400')} />
+                    {isAdded ? (
+                      <Check className="size-4 text-emerald-400" />
+                    ) : (
+                      <Plus className="size-4" />
+                    )}
                   </Button>
                 </div>
               );
@@ -953,6 +972,33 @@ export default function NutritionPage() {
               )}
               Сгенерировать
             </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Pick meal type before photo recognition */}
+      <Sheet open={photoMealSheetOpen} onOpenChange={setPhotoMealSheetOpen}>
+        <SheetContent side="bottom" className="max-h-[60vh] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>К какому приёму пищи?</SheetTitle>
+            <SheetDescription>
+              Выберите, куда записать распознанные продукты
+            </SheetDescription>
+          </SheetHeader>
+          <div className="grid grid-cols-2 gap-3 p-4">
+            {MEAL_TYPES.map((mt) => (
+              <Button
+                key={mt.value}
+                variant="outline"
+                className="h-16 justify-start gap-3 px-4"
+                onClick={() => handlePhotoMealPicked(mt.value)}
+              >
+                <div className="flex size-9 items-center justify-center rounded-lg bg-primary/12">
+                  <UtensilsCrossed className="size-4 text-primary" />
+                </div>
+                <span className="text-sm font-medium">{mt.label}</span>
+              </Button>
+            ))}
           </div>
         </SheetContent>
       </Sheet>

@@ -153,7 +153,7 @@ function VerifyEmailContent() {
     );
 
   return (
-    <Card className="border-[#712031]/65">
+    <Card className="border-[rgb(var(--theme-shade-rgb)/65%)]">
       <CardHeader className="text-center">
         <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-lg border border-primary/35 bg-primary/12 shadow-[0_0_20px_rgb(190_24_42_/_14%)]">
           {icon}
@@ -233,7 +233,7 @@ export default function VerifyEmailPage() {
   return (
     <Suspense
       fallback={
-        <Card className="border-[#712031]/65">
+        <Card className="border-[rgb(var(--theme-shade-rgb)/65%)]">
           <CardHeader className="text-center">
             <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-lg border border-primary/35 bg-primary/12">
               <Loader2 className="size-6 animate-spin text-primary" />

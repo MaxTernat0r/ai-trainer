@@ -209,7 +209,7 @@ export default function DashboardPage() {
               >
                 <CardContent className="flex h-full flex-col justify-between">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-lg border border-[#712031]/55 bg-black/18">
+                    <div className="flex size-10 items-center justify-center rounded-lg border border-[rgb(var(--theme-shade-rgb)/55%)] bg-black/18">
                       <stat.icon className={`size-5 ${stat.tone}`} />
                     </div>
                     <Zap className="size-4 text-primary/70" />
@@ -253,8 +253,8 @@ export default function DashboardPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-hidden rounded-lg border border-[#712031]/55">
-            <div className="hidden grid-cols-[0.28fr_1fr_0.58fr_0.32fr] gap-4 border-b border-[#712031]/55 bg-black/18 px-4 py-3 text-xs text-muted-foreground md:grid">
+          <div className="overflow-hidden rounded-lg border border-[rgb(var(--theme-shade-rgb)/55%)]">
+            <div className="hidden grid-cols-[0.28fr_1fr_0.58fr_0.32fr] gap-4 border-b border-[rgb(var(--theme-shade-rgb)/55%)] bg-black/18 px-4 py-3 text-xs text-muted-foreground md:grid">
               <span>Instance ID</span>
               <span>Metric</span>
               <span>Value</span>
@@ -263,7 +263,7 @@ export default function DashboardPage() {
             {streamRows.map((row) => (
               <div
                 key={row.id}
-                className="grid gap-2 border-b border-[#712031]/42 px-4 py-4 text-sm last:border-b-0 md:grid-cols-[0.28fr_1fr_0.58fr_0.32fr] md:gap-4"
+                className="grid gap-2 border-b border-[rgb(var(--theme-shade-rgb)/42%)] px-4 py-4 text-sm last:border-b-0 md:grid-cols-[0.28fr_1fr_0.58fr_0.32fr] md:gap-4"
               >
                 <span className="tactical-readout text-[0.72rem] text-muted-foreground">
                   {row.id}

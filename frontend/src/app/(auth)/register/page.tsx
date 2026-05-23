@@ -80,7 +80,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <Card className="border-[#712031]/65">
+    <Card className="border-[rgb(var(--theme-shade-rgb)/65%)]">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Регистрация</CardTitle>
       </CardHeader>

@@ -172,7 +172,7 @@ export default function ChatPage() {
 
   const conversationsListContent = (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b border-[#712031]/55 p-4 pr-12">
+      <div className="flex shrink-0 items-center justify-between border-b border-[rgb(var(--theme-shade-rgb)/55%)] p-4">
         <h2 className="font-semibold">Диалоги</h2>
         <Button
           variant="ghost"
@@ -225,7 +225,7 @@ export default function ChatPage() {
                   'group glass-lane flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-all duration-200',
                   activeConversationId === conv.id
                     ? 'border-primary/45 bg-primary/12 shadow-[inset_0_1px_0_rgb(255_255_255_/_8%),0_0_20px_rgb(255_0_48_/_10%)]'
-                    : 'border-[#712031]/30 hover:border-primary/35 hover:bg-white/[0.055]'
+                    : 'border-[rgb(var(--theme-shade-rgb)/30%)] hover:border-primary/35 hover:bg-white/[0.055]'
                 )}
               >
                 <MessageSquare
@@ -261,11 +261,11 @@ export default function ChatPage() {
       {/* Sidebar - conversations list */}
       <aside
         className={cn(
-          'hidden min-h-0 flex-col border-r border-[#712031]/55 bg-black/[0.18] transition-all duration-300',
+          'hidden min-h-0 flex-col border-r border-[rgb(var(--theme-shade-rgb)/55%)] bg-black/[0.18] transition-all duration-300',
           sidebarVisible ? 'md:flex md:w-80' : 'md:hidden'
         )}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-[#712031]/55 p-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-[rgb(var(--theme-shade-rgb)/55%)] p-4">
           <h2 className="font-semibold">Диалоги</h2>
           <div className="flex items-center gap-1">
             <Button
@@ -320,7 +320,7 @@ export default function ChatPage() {
                     'group glass-lane flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-all duration-200',
                     activeConversationId === conv.id
                       ? 'border-primary/45 bg-primary/12 shadow-[inset_0_1px_0_rgb(255_255_255_/_8%),0_0_20px_rgb(255_0_48_/_10%)]'
-                      : 'border-[#712031]/30 hover:border-primary/35 hover:bg-white/[0.055]'
+                      : 'border-[rgb(var(--theme-shade-rgb)/30%)] hover:border-primary/35 hover:bg-white/[0.055]'
                   )}
                 >
                   <MessageSquare
@@ -353,7 +353,7 @@ export default function ChatPage() {
       {/* Main chat area */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Chat header */}
-        <div className="flex shrink-0 items-center gap-3 border-b border-[#712031]/55 px-4 py-3">
+        <div className="flex shrink-0 items-center gap-3 border-b border-[rgb(var(--theme-shade-rgb)/55%)] px-4 py-3">
           <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon-xs" className="md:hidden">
@@ -361,7 +361,7 @@ export default function ChatPage() {
                 <span className="sr-only">Открыть список диалогов</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-80 max-w-[85vw] p-0">
+            <SheetContent side="left" className="w-80 max-w-[85vw] p-0" showCloseButton={false}>
               <SheetHeader className="sr-only">
                 <SheetTitle>Диалоги</SheetTitle>
               </SheetHeader>
@@ -494,7 +494,7 @@ export default function ChatPage() {
 
         {/* Quick actions */}
         {!hasMessages && !conversationLoading && (
-          <div className="shrink-0 border-t border-[#712031]/55 bg-black/[0.18] px-4 pt-3">
+          <div className="shrink-0 border-t border-[rgb(var(--theme-shade-rgb)/55%)] bg-black/[0.18] px-4 pt-3">
             <div className="mx-auto flex max-w-3xl gap-2 overflow-x-auto pb-2">
               {quickActions.map((action) => (
                 <Button
@@ -514,7 +514,7 @@ export default function ChatPage() {
         )}
 
         {/* Input */}
-        <div className="shrink-0 border-t border-[#712031]/55 bg-black/[0.18] p-4">
+        <div className="shrink-0 border-t border-[rgb(var(--theme-shade-rgb)/55%)] bg-black/[0.18] p-4">
           <form
             onSubmit={handleSubmit}
             className="mx-auto flex max-w-3xl items-center gap-2"
