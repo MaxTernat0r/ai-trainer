@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useTheme } from 'next-themes';
 import {
   Home,
   Dumbbell,
@@ -12,14 +11,14 @@ import {
   BarChart3,
   User,
   Menu,
-  Moon,
-  Sun,
+  Palette,
   ChevronLeft,
   Activity,
   Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUIStore } from '@/lib/stores/ui-store';
+import { usePaletteStore } from '@/lib/stores/palette-store';
 import { useProfile } from '@/lib/queries/use-profile';
 import { cn } from '@/lib/utils';
 
@@ -39,7 +38,7 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
+  const { palette, cyclePalette } = usePaletteStore();
   const { sidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
   const { data: profile, isLoading: profileLoading } = useProfile();
   const [isMobile, setIsMobile] = useState(false);
@@ -177,9 +176,44 @@ export default function DashboardLayout({
                 <span className="status-pill">live</span>
               </div>
             </div>
-            <div className="flex items-center justify-between px-1 text-sm text-muted-foreground">
-              <span>Theme</span>
-              <Sparkles className="size-4 text-primary" />
+            <div className="flex flex-col gap-2 px-1">
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <span>Theme</span>
+                <Sparkles className="size-4 text-primary" />
+              </div>
+              <div
+                role="radiogroup"
+                aria-label="Палитра"
+                className="grid grid-cols-2 gap-1 rounded-lg border border-white/10 bg-white/[0.04] p-1"
+              >
+                {(
+                  [
+                    { id: 'crimson', label: 'Crimson' },
+                    { id: 'aurora', label: 'Aurora' },
+                  ] as const
+                ).map((p) => {
+                  const isActive = palette === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={isActive}
+                      onClick={() => {
+                        if (!isActive) cyclePalette();
+                      }}
+                      className={cn(
+                        'rounded-md px-2 py-1.5 text-xs font-semibold transition-all',
+                        isActive
+                          ? 'border border-primary/35 bg-primary/12 text-primary shadow-[0_0_18px_rgb(190_24_42_/_14%)]'
+                          : 'border border-transparent text-muted-foreground hover:bg-white/[0.06] hover:text-foreground'
+                      )}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -224,11 +258,11 @@ export default function DashboardLayout({
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              onClick={cyclePalette}
+              title={palette === 'crimson' ? 'Сменить тему: Aurora' : 'Сменить тему: Crimson'}
             >
-              <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-              <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-              <span className="sr-only">Переключить тему</span>
+              <Palette className="size-4" />
+              <span className="sr-only">Переключить палитру</span>
             </Button>
             <Link href="/profile">
               <div className="flex size-10 items-center justify-center rounded-lg border border-primary/35 bg-primary/12 text-primary shadow-[0_0_20px_rgb(190_24_42_/_12%)]">
