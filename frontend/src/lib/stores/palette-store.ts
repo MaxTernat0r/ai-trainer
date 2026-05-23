@@ -12,11 +12,11 @@ interface PaletteState {
 }
 
 const PALETTE_CLASS: Record<Palette, string> = {
-  crimson: '',
+  crimson: 'theme-crimson',
   aurora: 'theme-aurora',
 };
 
-const ALL_PALETTE_CLASSES = Object.values(PALETTE_CLASS).filter(Boolean);
+const ALL_PALETTE_CLASSES = Object.values(PALETTE_CLASS);
 
 function applyPaletteToDom(p: Palette) {
   if (typeof document === 'undefined') return;
@@ -24,8 +24,7 @@ function applyPaletteToDom(p: Palette) {
   for (const cls of ALL_PALETTE_CLASSES) {
     html.classList.remove(cls);
   }
-  const next = PALETTE_CLASS[p];
-  if (next) html.classList.add(next);
+  html.classList.add(PALETTE_CLASS[p]);
 
   // Retrigger entrance animations
   html.removeAttribute('data-theme-flash');

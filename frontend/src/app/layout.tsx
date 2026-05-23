@@ -117,6 +117,8 @@ function serializeJsonLd(schema: Record<string, unknown>): string {
   return JSON.stringify(schema).replace(/</g, "\\u003c");
 }
 
+const PALETTE_BOOTSTRAP_SCRIPT = `(function(){try{var s=localStorage.getItem('coach-palette');var p='crimson';if(s){var o=JSON.parse(s);if(o&&o.state&&(o.state.palette==='crimson'||o.state.palette==='aurora'))p=o.state.palette;}document.documentElement.classList.add('theme-'+p);}catch(e){document.documentElement.classList.add('theme-crimson');}})();`;
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -133,6 +135,7 @@ export default function RootLayout({
   return (
     <html lang="ru" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: PALETTE_BOOTSTRAP_SCRIPT }} />
         {jsonLdSchemas.map((schema, index) => (
           <script
             key={index}

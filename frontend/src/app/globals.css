@@ -99,6 +99,25 @@
 }
 
 .dark {
+  color-scheme: dark;
+}
+
+.theme-crimson {
+  --brand-accent: 255 0 48;
+  --brand-deep: 175 10 35;
+  --brand-shade: 118 24 38;
+  --brand-tint: 176 42 59;
+  --theme-shade-color: #712031;
+  --theme-shade-rgb: 113 32 49;
+  --theme-glow-color: rgb(var(--brand-accent) / 12%);
+  --coach-surface-gradient: linear-gradient(104.52deg, rgb(var(--brand-deep) / 18%) -19.33%, rgb(8 7 18 / 58%) 60.29%);
+  --coach-body-gradient:
+    linear-gradient(115deg, rgb(0 0 2 / 46%) 0%, rgb(4 3 9 / 34%) 46%, rgb(0 0 2 / 56%) 100%),
+    url("/marketing/coach-ai-bg.jpg") center / cover no-repeat,
+    rgb(0 0 2);
+  --coach-body-overlay-a:
+    radial-gradient(circle at 8% 84%, rgb(var(--brand-accent) / 24%), transparent 34%),
+    linear-gradient(104.52deg, rgb(var(--brand-deep) / 10%) -19.33%, rgb(17 14 40 / 16%) 60.29%);
   --background: oklch(0.035 0.016 330);
   --foreground: oklch(0.955 0.01 285);
   --card: oklch(0.08 0.035 350 / 92%);
@@ -132,9 +151,7 @@
   --sidebar-ring: oklch(0.62 0.24 22);
 }
 
-.theme-aurora,
-.dark.theme-aurora,
-html.theme-aurora {
+.theme-aurora {
   --brand-accent: 4 200 190;
   --brand-deep: 4 200 190;
   --brand-shade: 5 138 132;
