@@ -27,6 +27,7 @@ MEDICAL_RESTRICTIONS = [
     {"name": "heart_condition", "description": "Заболевание сердца"},
     {"name": "asthma", "description": "Бронхиальная астма"},
     {"name": "diabetes", "description": "Сахарный диабет"},
+    {"name": "anemia", "description": "Анемия"},
     {"name": "pregnancy", "description": "Беременность"},
     {"name": "ankle_injury", "description": "Травма голеностопа"},
     {"name": "wrist_injury", "description": "Травма запястья"},

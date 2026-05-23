@@ -100,7 +100,7 @@ done
 
 docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
 docker compose -f docker-compose.prod.yml run --rm backend python -m scripts.seed_db
-docker compose -f docker-compose.prod.yml up -d --force-recreate backend frontend
+docker compose -f docker-compose.prod.yml up -d --force-recreate --always-recreate-deps backend frontend smtp-proxy
 
 if [[ "${SKIP_CERTBOT:-0}" == "1" ]]; then
   docker compose -f docker-compose.prod.yml -f docker-compose.bootstrap.yml up -d --force-recreate nginx
