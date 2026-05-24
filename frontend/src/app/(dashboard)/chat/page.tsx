@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import {
   Send,
@@ -34,22 +34,62 @@ import {
   useCreateConversation,
 } from '@/lib/queries/use-chat';
 import { useChatStream } from '@/lib/hooks/use-chat-stream';
-import type { ChatMessage } from '@/types/chat';
+import type {
+  AgentEvent,
+  ChatMessage,
+  ToolProposal,
+} from '@/types/chat';
+import { ToolCard } from '@/components/chat/tool-card';
+import { ToolProposalCard } from '@/components/chat/tool-proposal-card';
 
 const quickActions = [
-  {
-    label: 'Составь тренировку',
-    icon: Dumbbell,
-  },
-  {
-    label: 'Посоветуй питание',
-    icon: UtensilsCrossed,
-  },
-  {
-    label: 'Как улучшить технику?',
-    icon: HelpCircle,
-  },
+  { label: 'Составь тренировку', icon: Dumbbell },
+  { label: 'Посоветуй питание', icon: UtensilsCrossed },
+  { label: 'Как улучшить технику?', icon: HelpCircle },
 ];
+
+interface AgentBubbleSegments {
+  textChunks: string[];
+  toolCards: { id: string; name: string; summary: string; state: 'running' | 'ok' | 'error' }[];
+  proposalIds: string[];
+}
+
+function partitionEvents(events: AgentEvent[]): AgentBubbleSegments {
+  const textChunks: string[] = [];
+  // Use a map to merge tool_use_start + later tool_result on the same id.
+  const toolCardsMap = new Map<string, AgentBubbleSegments['toolCards'][number]>();
+  const proposalIds: string[] = [];
+
+  for (const ev of events) {
+    if (ev.type === 'text') {
+      textChunks.push(ev.content);
+    } else if (ev.type === 'tool_use_start') {
+      toolCardsMap.set(ev.id, {
+        id: ev.id,
+        name: ev.name,
+        summary: ev.summary,
+        state: 'running',
+      });
+    } else if (ev.type === 'tool_result') {
+      const existing = toolCardsMap.get(ev.id);
+      // Skip if this id is a proposal — proposal cards handle their own state
+      if (proposalIds.includes(ev.id)) continue;
+      toolCardsMap.set(ev.id, {
+        id: ev.id,
+        name: ev.name,
+        summary: ev.summary,
+        state: ev.ok ? 'ok' : 'error',
+      });
+      if (!existing) {
+        // tool_result без предшествующего tool_use_start — например, после approve
+      }
+    } else if (ev.type === 'tool_proposal') {
+      proposalIds.push(ev.id);
+    }
+  }
+
+  return { textChunks, toolCards: [...toolCardsMap.values()], proposalIds };
+}
 
 export default function ChatPage() {
   const [inputValue, setInputValue] = useState('');
@@ -59,53 +99,60 @@ export default function ChatPage() {
   const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Queries
   const { data: conversations, isLoading: conversationsLoading } = useConversations();
   const { data: activeConversation, isLoading: conversationLoading } = useConversation(activeConversationId);
-
-  // Mutations
   const createConversation = useCreateConversation();
 
-  // Chat streaming
-  const { streamMessage, isStreaming, sendMessage: sendStreamMessage } = useChatStream();
+  const {
+    streamText,
+    streamEvents,
+    pendingProposals,
+    isStreaming,
+    sendMessage: sendStreamMessage,
+    approveProposal,
+    resetStream,
+  } = useChatStream();
 
-  // Auto-select first conversation
   useEffect(() => {
     if (!activeConversationId && conversations && conversations.length > 0) {
       setActiveConversationId(conversations[0].id);
     }
   }, [conversations, activeConversationId]);
 
-  // Build messages array: real messages + pending user message + streaming/typing
-  const messages: ChatMessage[] = (() => {
+  // When switching conversation, clear stream state
+  useEffect(() => {
+    resetStream();
+  }, [activeConversationId, resetStream]);
+
+  const messages: ChatMessage[] = useMemo(() => {
     const base = activeConversation?.messages ?? [];
     const result = [...base];
 
     if (pendingUserMessage) {
       const lastUserInBase = [...base].reverse().find((m) => m.role === 'user');
-      const alreadyShown =
-        lastUserInBase?.content.trim() === pendingUserMessage.trim();
+      const alreadyShown = lastUserInBase?.content.trim() === pendingUserMessage.trim();
       if (!alreadyShown) {
         result.push({
           id: '__pending_user__',
-          role: 'user' as const,
+          role: 'user',
           content: pendingUserMessage,
           created_at: new Date().toISOString(),
         });
       }
     }
 
-    if (isStreaming) {
+    if (isStreaming || streamEvents.length > 0) {
       result.push({
         id: '__streaming__',
-        role: 'assistant' as const,
-        content: streamMessage || '',
+        role: 'assistant',
+        content: streamText,
         created_at: new Date().toISOString(),
+        tool_events: streamEvents,
       });
     }
 
     return result;
-  })();
+  }, [activeConversation?.messages, pendingUserMessage, isStreaming, streamEvents, streamText]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -113,14 +160,12 @@ export default function ChatPage() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, streamMessage, scrollToBottom]);
+  }, [messages, streamText, streamEvents, scrollToBottom]);
 
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isStreaming) return;
 
     let conversationId = activeConversationId;
-
-    // Create a new conversation if none is active
     if (!conversationId) {
       try {
         const newConv = await createConversation.mutateAsync(undefined);
@@ -144,6 +189,15 @@ export default function ChatPage() {
     }
   };
 
+  const handleApproveProposal = async (proposalId: string, approved: boolean) => {
+    if (!activeConversationId || isStreaming) return;
+    try {
+      await approveProposal(activeConversationId, proposalId, approved);
+    } catch {
+      toast.error('Не удалось обработать действие');
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     handleSendMessage(inputValue);
@@ -162,15 +216,12 @@ export default function ChatPage() {
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleTimeString('ru-RU', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   };
 
   const hasMessages = messages.length > 0;
 
-  const conversationsListContent = (
+  const renderConversationList = (onSelect?: () => void) => (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-[rgb(var(--theme-shade-rgb)/55%)] p-4">
         <h2 className="font-semibold">Диалоги</h2>
@@ -179,7 +230,7 @@ export default function ChatPage() {
           size="icon-xs"
           onClick={() => {
             handleNewConversation();
-            setMobileSidebarOpen(false);
+            onSelect?.();
           }}
           disabled={createConversation.isPending}
         >
@@ -212,34 +263,30 @@ export default function ChatPage() {
                 tabIndex={0}
                 onClick={() => {
                   setActiveConversationId(conv.id);
-                  setMobileSidebarOpen(false);
+                  onSelect?.();
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
                     setActiveConversationId(conv.id);
-                    setMobileSidebarOpen(false);
+                    onSelect?.();
                   }
                 }}
                 className={cn(
                   'group glass-lane flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-all duration-200',
                   activeConversationId === conv.id
-                    ? 'border-primary/45 bg-primary/12 shadow-[inset_0_1px_0_rgb(255_255_255_/_8%),0_0_20px_rgb(255_0_48_/_10%)]'
+                    ? 'border-primary/45 bg-primary/12 shadow-[inset_0_1px_0_rgb(255_255_255_/_8%),0_0_20px_rgb(var(--brand-accent)/_10%)]'
                     : 'border-[rgb(var(--theme-shade-rgb)/30%)] hover:border-primary/35 hover:bg-white/[0.055]'
                 )}
               >
                 <MessageSquare
                   className={cn(
                     'size-4 shrink-0',
-                    activeConversationId === conv.id
-                      ? 'text-primary'
-                      : 'text-muted-foreground'
+                    activeConversationId === conv.id ? 'text-primary' : 'text-muted-foreground'
                   )}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">
-                    {conv.title ?? 'Новый диалог'}
-                  </p>
+                  <p className="truncate font-medium">{conv.title ?? 'Новый диалог'}</p>
                   <p className="text-xs text-muted-foreground">
                     {new Date(conv.created_at).toLocaleDateString('ru-RU')}
                   </p>
@@ -256,9 +303,61 @@ export default function ChatPage() {
     </div>
   );
 
+  const renderAssistantBubble = (message: ChatMessage) => {
+    if (message.id !== '__streaming__') {
+      // Persisted assistant message — just markdown text. Tool history is on the
+      // streaming bubble; once the turn is committed only text survives.
+      return (
+        <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+          <ReactMarkdown>{message.content}</ReactMarkdown>
+        </div>
+      );
+    }
+
+    const events = message.tool_events ?? [];
+    const segments = partitionEvents(events);
+    const text = segments.textChunks.join('');
+    const showThinkingDots = !text && segments.toolCards.length === 0 && segments.proposalIds.length === 0;
+
+    return (
+      <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+        {showThinkingDots ? (
+          <div className="flex items-center gap-1 py-1">
+            <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.3s]" />
+            <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.15s]" />
+            <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60" />
+          </div>
+        ) : (
+          <>
+            {text && <ReactMarkdown>{text}</ReactMarkdown>}
+            {segments.toolCards.map((card) => (
+              <ToolCard key={card.id} summary={card.summary} state={card.state} />
+            ))}
+            {segments.proposalIds.map((pid) => {
+              const proposal: ToolProposal | undefined = pendingProposals[pid];
+              if (!proposal) return null;
+              return (
+                <ToolProposalCard
+                  key={pid}
+                  proposal={proposal}
+                  disabled={isStreaming}
+                  onApprove={() => handleApproveProposal(pid, true)}
+                  onReject={() => handleApproveProposal(pid, false)}
+                />
+              );
+            })}
+            {isStreaming && text && (
+              <span className="ml-1 inline-block size-2 animate-pulse rounded-full bg-current" />
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="cockpit-panel flex h-full min-h-0 overflow-hidden rounded-lg">
-      {/* Sidebar - conversations list */}
+      {/* Sidebar - desktop */}
       <aside
         className={cn(
           'hidden min-h-0 flex-col border-r border-[rgb(var(--theme-shade-rgb)/55%)] bg-black/[0.18] transition-all duration-300',
@@ -280,11 +379,7 @@ export default function ChatPage() {
                 <Plus className="size-4" />
               )}
             </Button>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => setSidebarVisible(false)}
-            >
+            <Button variant="ghost" size="icon-xs" onClick={() => setSidebarVisible(false)}>
               <PanelLeftClose className="size-4" />
             </Button>
           </div>
@@ -319,22 +414,18 @@ export default function ChatPage() {
                   className={cn(
                     'group glass-lane flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-all duration-200',
                     activeConversationId === conv.id
-                      ? 'border-primary/45 bg-primary/12 shadow-[inset_0_1px_0_rgb(255_255_255_/_8%),0_0_20px_rgb(255_0_48_/_10%)]'
+                      ? 'border-primary/45 bg-primary/12 shadow-[inset_0_1px_0_rgb(255_255_255_/_8%),0_0_20px_rgb(var(--brand-accent)/_10%)]'
                       : 'border-[rgb(var(--theme-shade-rgb)/30%)] hover:border-primary/35 hover:bg-white/[0.055]'
                   )}
                 >
                   <MessageSquare
                     className={cn(
                       'size-4 shrink-0',
-                      activeConversationId === conv.id
-                        ? 'text-primary'
-                        : 'text-muted-foreground'
+                      activeConversationId === conv.id ? 'text-primary' : 'text-muted-foreground'
                     )}
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
-                      {conv.title ?? 'Новый диалог'}
-                    </p>
+                    <p className="truncate font-medium">{conv.title ?? 'Новый диалог'}</p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(conv.created_at).toLocaleDateString('ru-RU')}
                     </p>
@@ -350,9 +441,8 @@ export default function ChatPage() {
         </div>
       </aside>
 
-      {/* Main chat area */}
+      {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Chat header */}
         <div className="flex shrink-0 items-center gap-3 border-b border-[rgb(var(--theme-shade-rgb)/55%)] px-4 py-3">
           <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
             <SheetTrigger asChild>
@@ -365,7 +455,7 @@ export default function ChatPage() {
               <SheetHeader className="sr-only">
                 <SheetTitle>Диалоги</SheetTitle>
               </SheetHeader>
-              {conversationsListContent}
+              {renderConversationList(() => setMobileSidebarOpen(false))}
             </SheetContent>
           </Sheet>
           {!sidebarVisible && (
@@ -385,13 +475,12 @@ export default function ChatPage() {
             <div>
               <h2 className="text-sm font-semibold">Чат с ИИ-тренером</h2>
               <p className="text-xs text-muted-foreground">
-                {isStreaming ? 'Печатает...' : 'Онлайн'}
+                {isStreaming ? 'Думает и работает...' : 'Онлайн (агент)'}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Messages */}
         <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-6">
           <div className="mx-auto flex max-w-3xl flex-col gap-4">
             {conversationLoading ? (
@@ -399,10 +488,7 @@ export default function ChatPage() {
                 {[1, 2, 3].map((i) => (
                   <div
                     key={i}
-                    className={cn(
-                      'flex gap-3',
-                      i % 2 === 0 ? 'flex-row-reverse' : 'flex-row'
-                    )}
+                    className={cn('flex gap-3', i % 2 === 0 ? 'flex-row-reverse' : 'flex-row')}
                   >
                     <Skeleton className="size-8 shrink-0 rounded-full" />
                     <Skeleton className={cn('h-20 rounded-2xl', i % 2 === 0 ? 'w-1/3' : 'w-2/3')} />
@@ -417,8 +503,9 @@ export default function ChatPage() {
                 <div className="text-center">
                   <h3 className="text-lg font-semibold">ИИ-тренер</h3>
                   <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                    Задайте вопрос о тренировках, питании или технике упражнений.
-                    Я помогу составить программу и достичь ваших целей.
+                    Я могу не только отвечать словами, но и реально менять твой профиль,
+                    создавать планы, записывать вес и анализировать прогресс. Любое
+                    важное действие сначала покажу карточкой с подтверждением.
                   </p>
                 </div>
               </div>
@@ -431,7 +518,6 @@ export default function ChatPage() {
                     message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
                   )}
                 >
-                  {/* Avatar */}
                   <div
                     className={cn(
                       'flex size-8 shrink-0 items-center justify-center rounded-full',
@@ -440,38 +526,20 @@ export default function ChatPage() {
                         : 'bg-muted'
                     )}
                   >
-                    {message.role === 'user' ? (
-                      <User className="size-4" />
-                    ) : (
-                      <Bot className="size-4" />
-                    )}
+                    {message.role === 'user' ? <User className="size-4" /> : <Bot className="size-4" />}
                   </div>
 
-                  {/* Message bubble */}
                   <div
                     className={cn(
                       'max-w-[80%] rounded-2xl px-4 py-2.5',
-                      message.role === 'user'
-                        ? 'bg-primary/15 text-foreground'
-                        : 'bg-muted'
+                      message.role === 'user' ? 'bg-primary/15 text-foreground' : 'bg-muted'
                     )}
                   >
-                    <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                      {message.role === 'user' ? (
-                        <p className="whitespace-pre-wrap">{message.content}</p>
-                      ) : message.id === '__streaming__' && !message.content ? (
-                        <div className="flex items-center gap-1 py-1">
-                          <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.3s]" />
-                          <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.15s]" />
-                          <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60" />
-                        </div>
-                      ) : (
-                        <ReactMarkdown>{message.content}</ReactMarkdown>
-                      )}
-                      {message.id === '__streaming__' && message.content && (
-                        <span className="ml-1 inline-block size-2 animate-pulse rounded-full bg-current" />
-                      )}
-                    </div>
+                    {message.role === 'user' ? (
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+                    ) : (
+                      renderAssistantBubble(message)
+                    )}
                     {message.id !== '__streaming__' && (
                       <p
                         className={cn(
@@ -492,7 +560,6 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Quick actions */}
         {!hasMessages && !conversationLoading && (
           <div className="shrink-0 border-t border-[rgb(var(--theme-shade-rgb)/55%)] bg-black/[0.18] px-4 pt-3">
             <div className="mx-auto flex max-w-3xl gap-2 overflow-x-auto pb-2">
@@ -513,12 +580,8 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* Input */}
         <div className="shrink-0 border-t border-[rgb(var(--theme-shade-rgb)/55%)] bg-black/[0.18] p-4">
-          <form
-            onSubmit={handleSubmit}
-            className="mx-auto flex max-w-3xl items-center gap-2"
-          >
+          <form onSubmit={handleSubmit} className="mx-auto flex max-w-3xl items-center gap-2">
             <Input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
@@ -532,11 +595,7 @@ export default function ChatPage() {
               className="priority-action"
               disabled={!inputValue.trim() || isStreaming}
             >
-              {isStreaming ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Send className="size-4" />
-              )}
+              {isStreaming ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
               <span className="sr-only">Отправить</span>
             </Button>
           </form>

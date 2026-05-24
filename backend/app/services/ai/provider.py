@@ -191,6 +191,7 @@ async def _create_anthropic_message(
     messages: list[dict[str, Any]],
     max_tokens: int,
     temperature: float,
+    tools: list[dict[str, Any]] | None = None,
 ) -> str:
     payload: dict[str, Any] = {
         "model": settings.ANTHROPIC_MODEL,
@@ -200,12 +201,102 @@ async def _create_anthropic_message(
     }
     if system:
         payload["system"] = system
+    if tools:
+        payload["tools"] = tools
 
     data = await _post_anthropic(payload)
     text = _extract_anthropic_text(data)
     if not text:
         raise AIServiceError("Anthropic returned an empty response")
     return _extract_json_candidate(text)
+
+
+async def create_anthropic_agent_turn(
+    *,
+    system: str | None,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    max_tokens: int,
+    temperature: float,
+) -> dict[str, Any]:
+    """Send a turn with tool definitions and return the raw Anthropic response.
+
+    The agent engine inspects content blocks (text vs. tool_use) to decide
+    whether to execute a tool, surface a proposal, or yield text. Streaming
+    is handled separately by stream_anthropic_agent_turn.
+    """
+    payload: dict[str, Any] = {
+        "model": settings.ANTHROPIC_MODEL,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "messages": messages,
+        "tools": tools,
+    }
+    if system:
+        payload["system"] = system
+    return await _post_anthropic(payload)
+
+
+async def stream_anthropic_agent_turn(
+    *,
+    system: str | None,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    max_tokens: int,
+    temperature: float,
+) -> AsyncGenerator[dict[str, Any], None]:
+    """Stream an agent turn. Yields raw Anthropic SSE events as decoded dicts.
+
+    Caller is expected to assemble text deltas, watch for tool_use blocks,
+    and emit higher-level protocol events.
+    """
+    payload: dict[str, Any] = {
+        "model": settings.ANTHROPIC_MODEL,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "messages": messages,
+        "tools": tools,
+        "stream": True,
+    }
+    if system:
+        payload["system"] = system
+
+    keys = get_anthropic_api_keys()
+    if not keys:
+        raise AIServiceError("Anthropic API key is not configured")
+
+    last_error: Exception | None = None
+    for index, api_key in enumerate(keys):
+        try:
+            async with httpx.AsyncClient(timeout=settings.ANTHROPIC_TIMEOUT_SECONDS) as client:
+                async with client.stream(
+                    "POST",
+                    ANTHROPIC_MESSAGES_URL,
+                    headers=_anthropic_headers(api_key),
+                    json=payload,
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        event_text = line.removeprefix("data: ").strip()
+                        if not event_text or event_text == "[DONE]":
+                            continue
+                        try:
+                            event = json.loads(event_text)
+                        except json.JSONDecodeError:
+                            continue
+                        yield event
+                        if event.get("type") == "error":
+                            raise AIServiceError("Anthropic stream returned an error")
+            return
+        except (httpx.HTTPError, ValueError, AIServiceError) as exc:
+            last_error = exc
+            if index < len(keys) - 1:
+                logger.warning("Anthropic agent stream failed with key #%s; trying next key", index + 1)
+                continue
+
+    raise AIServiceError("Anthropic agent stream failed") from last_error
 
 
 async def _post_anthropic(payload: dict[str, Any]) -> dict[str, Any]:

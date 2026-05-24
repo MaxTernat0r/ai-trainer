@@ -11,6 +11,10 @@ class ChatMessageCreate(BaseModel):
     content: str
 
 
+class ToolProposalApprove(BaseModel):
+    approved: bool
+
+
 class ChatMessageRead(BaseModel):
     id: str
     role: str

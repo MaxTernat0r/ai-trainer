@@ -70,7 +70,7 @@ const difficultyLabels: Record<string, string> = {
 const difficultyColors: Record<string, string> = {
   beginner: 'bg-white/[0.055] text-foreground/80',
   intermediate: 'bg-primary/10 text-primary',
-  advanced: 'bg-[#ff0030]/15 text-[#f5e7ea]',
+  advanced: 'bg-[rgb(var(--brand-accent)/15%)] text-primary',
 };
 
 const goalLabels: Record<string, string> = {

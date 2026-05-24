@@ -4,143 +4,244 @@ import { useState, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queries/keys';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import type { AgentEvent, ToolProposal } from '@/types/chat';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 interface UseChatStreamReturn {
-  streamMessage: string;
+  streamText: string;
+  streamEvents: AgentEvent[];
+  pendingProposals: Record<string, ToolProposal>;
   isStreaming: boolean;
   sendMessage: (conversationId: string, content: string) => Promise<void>;
+  approveProposal: (
+    conversationId: string,
+    proposalId: string,
+    approved: boolean,
+  ) => Promise<void>;
+  resetStream: () => void;
 }
 
+const QUERIES_TO_INVALIDATE_AFTER_WRITE = (qc: ReturnType<typeof useQueryClient>) => {
+  qc.invalidateQueries({ queryKey: queryKeys.workouts.all });
+  qc.invalidateQueries({ queryKey: queryKeys.nutrition.all });
+  qc.invalidateQueries({ queryKey: queryKeys.analytics.all });
+  qc.invalidateQueries({ queryKey: queryKeys.auth.profile() });
+};
+
 export function useChatStream(): UseChatStreamReturn {
-  const [streamMessage, setStreamMessage] = useState('');
+  const [streamText, setStreamText] = useState('');
+  const [streamEvents, setStreamEvents] = useState<AgentEvent[]>([]);
+  const [pendingProposals, setPendingProposals] = useState<Record<string, ToolProposal>>({});
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
 
+  const resetStream = useCallback(() => {
+    setStreamText('');
+    setStreamEvents([]);
+  }, []);
+
+  const handleEvent = useCallback((event: AgentEvent) => {
+    setStreamEvents((prev) => [...prev, event]);
+
+    if (event.type === 'text') {
+      setStreamText((prev) => prev + event.content);
+      return;
+    }
+    if (event.type === 'tool_proposal') {
+      setPendingProposals((prev) => ({
+        ...prev,
+        [event.id]: {
+          id: event.id,
+          name: event.name,
+          arguments: event.arguments,
+          summary: event.summary,
+          status: 'pending',
+        },
+      }));
+      return;
+    }
+    if (event.type === 'tool_executing') {
+      setPendingProposals((prev) => {
+        const existing = prev[event.id];
+        if (!existing) return prev;
+        return { ...prev, [event.id]: { ...existing, status: 'executing' } };
+      });
+      return;
+    }
+    if (event.type === 'tool_result') {
+      setPendingProposals((prev) => {
+        const existing = prev[event.id];
+        if (!existing) return prev;
+        return {
+          ...prev,
+          [event.id]: {
+            ...existing,
+            status: event.ok ? 'approved' : 'error',
+            resultSummary: event.summary,
+            result: event.result,
+            error: event.ok ? undefined : event.summary,
+          },
+        };
+      });
+    }
+  }, []);
+
+  const consumeStream = useCallback(async (response: Response, signal: AbortSignal) => {
+    if (!response.ok) {
+      throw new Error(`Chat request failed: ${response.status}`);
+    }
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      if (signal.aborted) break;
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data: ')) continue;
+        const payload = trimmed.slice(6);
+        if (payload === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(payload) as AgentEvent;
+          handleEvent(parsed);
+        } catch {
+          // Legacy plain-text fallback (older non-agent endpoints)
+          handleEvent({ type: 'text', content: payload });
+        }
+      }
+    }
+  }, [handleEvent]);
+
+  const fetchWithRefresh = useCallback(async (
+    url: string,
+    init: RequestInit,
+  ): Promise<Response> => {
+    let token = useAuthStore.getState().accessToken;
+    let response = await fetch(url, {
+      ...init,
+      headers: {
+        ...(init.headers || {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (response.status === 401) {
+      try {
+        const refreshRes = await fetch('/api/auth/refresh', { method: 'POST' });
+        if (refreshRes.ok) {
+          const data = await refreshRes.json();
+          useAuthStore.getState().setAccessToken(data.accessToken);
+          token = data.accessToken;
+          response = await fetch(url, {
+            ...init,
+            headers: {
+              ...(init.headers || {}),
+              Authorization: `Bearer ${token}`,
+            },
+          });
+        }
+      } catch { /* refresh failed */ }
+    }
+    return response;
+  }, []);
+
   const sendMessage = useCallback(
     async (conversationId: string, content: string) => {
-      // Abort any in-flight stream
-      if (abortRef.current) {
-        abortRef.current.abort();
-      }
-
+      if (abortRef.current) abortRef.current.abort();
       const controller = new AbortController();
       abortRef.current = controller;
 
-      setStreamMessage('');
+      resetStream();
       setIsStreaming(true);
 
       try {
-        let token = useAuthStore.getState().accessToken;
-
-        let response = await fetch(
+        const response = await fetchWithRefresh(
           `${API_BASE_URL}/api/v1/chat/conversations/${conversationId}/messages`,
           {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content }),
             signal: controller.signal,
-          }
+          },
         );
-
-        // Retry once after refreshing token
-        if (response.status === 401) {
-          try {
-            const refreshRes = await fetch('/api/auth/refresh', { method: 'POST' });
-            if (refreshRes.ok) {
-              const data = await refreshRes.json();
-              useAuthStore.getState().setAccessToken(data.accessToken);
-              token = data.accessToken;
-              response = await fetch(
-                `${API_BASE_URL}/api/v1/chat/conversations/${conversationId}/messages`,
-                {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                  },
-                  body: JSON.stringify({ content }),
-                  signal: controller.signal,
-                }
-              );
-            }
-          } catch { /* refresh failed */ }
-        }
-
-        if (!response.ok) {
-          throw new Error(`Chat request failed: ${response.status}`);
-        }
-
-        const reader = response.body?.getReader();
-        if (!reader) {
-          throw new Error('No response body');
-        }
-
-        const decoder = new TextDecoder();
-        let accumulated = '';
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-
-          // Parse SSE lines
-          const lines = buffer.split('\n');
-          // Keep the last potentially incomplete line in the buffer
-          buffer = lines.pop() ?? '';
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-
-            if (trimmed.startsWith('data: ')) {
-              const data = trimmed.slice(6);
-
-              if (data === '[DONE]') {
-                continue;
-              }
-
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.content) {
-                  accumulated += parsed.content;
-                  setStreamMessage(accumulated);
-                }
-              } catch {
-                // If not valid JSON, treat data as plain text chunk
-                accumulated += data;
-                setStreamMessage(accumulated);
-              }
-            }
-          }
-        }
+        await consumeStream(response, controller.signal);
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          // Request was intentionally aborted
-          return;
-        }
+        if (error instanceof DOMException && error.name === 'AbortError') return;
         throw error;
       } finally {
         setIsStreaming(false);
         abortRef.current = null;
-
-        // Invalidate the conversation query to refetch complete messages
         queryClient.invalidateQueries({
           queryKey: queryKeys.chat.conversation(conversationId),
         });
         queryClient.invalidateQueries({
           queryKey: queryKeys.chat.conversations(),
         });
+        QUERIES_TO_INVALIDATE_AFTER_WRITE(queryClient);
       }
     },
-    [queryClient]
+    [consumeStream, fetchWithRefresh, queryClient, resetStream],
   );
 
-  return { streamMessage, isStreaming, sendMessage };
+  const approveProposal = useCallback(
+    async (conversationId: string, proposalId: string, approved: boolean) => {
+      if (abortRef.current) abortRef.current.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      setPendingProposals((prev) => {
+        const existing = prev[proposalId];
+        if (!existing) return prev;
+        return {
+          ...prev,
+          [proposalId]: { ...existing, status: approved ? 'executing' : 'rejected' },
+        };
+      });
+
+      setIsStreaming(true);
+
+      try {
+        const response = await fetchWithRefresh(
+          `${API_BASE_URL}/api/v1/chat/proposals/${proposalId}/approve`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ approved }),
+            signal: controller.signal,
+          },
+        );
+        await consumeStream(response, controller.signal);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        throw error;
+      } finally {
+        setIsStreaming(false);
+        abortRef.current = null;
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.chat.conversation(conversationId),
+        });
+        QUERIES_TO_INVALIDATE_AFTER_WRITE(queryClient);
+      }
+    },
+    [consumeStream, fetchWithRefresh, queryClient],
+  );
+
+  return {
+    streamText,
+    streamEvents,
+    pendingProposals,
+    isStreaming,
+    sendMessage,
+    approveProposal,
+    resetStream,
+  };
 }

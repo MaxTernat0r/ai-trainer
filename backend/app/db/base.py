@@ -7,3 +7,4 @@ from app.models.workout import WorkoutPlan, WorkoutSession, WorkoutExercise, Exe
 from app.models.nutrition import NutritionPlan, Meal, MealItem, FoodItem, NutritionLog  # noqa: F401
 from app.models.chat import ChatConversation, ChatMessage  # noqa: F401
 from app.models.analytics import WeightLog, MeasurementLog  # noqa: F401
+from app.models.agent import AgentToolCall  # noqa: F401

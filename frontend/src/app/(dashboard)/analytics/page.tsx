@@ -19,6 +19,7 @@ import {
   History,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { usePaletteStore } from '@/lib/stores/palette-store';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -86,6 +87,8 @@ function getMeasurementLabel(type: string): string {
 }
 
 export default function AnalyticsPage() {
+  const palette = usePaletteStore((s) => s.palette);
+  const chartColor = palette === 'aurora' ? '#10c3aa' : '#ff0030';
   const [newWeight, setNewWeight] = useState('');
   const [weightPeriod, setWeightPeriod] = useState<'week' | 'month' | 'year' | 'all'>('month');
   const [logDate, setLogDate] = useState(
@@ -359,7 +362,7 @@ export default function AnalyticsPage() {
               </Card>
               <Card className="border-border/50">
                 <CardContent className="flex items-center gap-2 pt-4 sm:gap-3 sm:pt-6">
-                  <div className={`flex size-8 shrink-0 items-center justify-center rounded-lg sm:size-10 ${isWeightDown ? 'bg-primary/12' : 'bg-red-500/10'}`}>
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/12 sm:size-10">
                     {isWeightDown ? (
                       <TrendingDown className="size-4 text-primary sm:size-5" />
                     ) : (
@@ -511,9 +514,9 @@ export default function AnalyticsPage() {
                         <Line
                           type="monotone"
                           dataKey="weight"
-                          stroke="#ff0030"
+                          stroke={chartColor}
                           strokeWidth={2}
-                          dot={{ fill: '#ff0030', strokeWidth: 2, r: 3 }}
+                          dot={{ fill: chartColor, strokeWidth: 2, r: 3 }}
                           activeDot={{ r: 5 }}
                         />
                       </LineChart>
@@ -880,9 +883,9 @@ export default function AnalyticsPage() {
                               <Line
                                 type="monotone"
                                 dataKey="volume"
-                                stroke="#ff0030"
+                                stroke={chartColor}
                                 strokeWidth={2}
-                                dot={{ fill: '#ff0030', strokeWidth: 2, r: 3 }}
+                                dot={{ fill: chartColor, strokeWidth: 2, r: 3 }}
                                 activeDot={{ r: 5 }}
                               />
                             </LineChart>
@@ -1035,9 +1038,9 @@ export default function AnalyticsPage() {
                             <Line
                               type="monotone"
                               dataKey="volume"
-                              stroke="#ff0030"
+                              stroke={chartColor}
                               strokeWidth={2}
-                              dot={{ fill: '#ff0030', strokeWidth: 2, r: 3 }}
+                              dot={{ fill: chartColor, strokeWidth: 2, r: 3 }}
                               activeDot={{ r: 5 }}
                             />
                           </LineChart>

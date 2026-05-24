@@ -9,13 +9,13 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: "border-[#8f2636]/65 bg-[#2d090f]/70 text-zinc-100 shadow-[0_0_18px_rgb(118_24_38_/_18%)] [a&]:hover:bg-[#3b0b15]/80",
+        default: "border-[rgb(var(--brand-edge)/65%)] bg-[rgb(var(--brand-deep-bg)/70%)] text-zinc-100 shadow-[0_0_18px_rgb(var(--brand-shade)/_18%)] [a&]:hover:bg-[rgb(var(--brand-deep-bg)/85%)]",
         secondary:
           "border-[rgb(var(--theme-shade-rgb)/50%)] bg-white/[0.045] text-secondary-foreground [a&]:hover:bg-white/10",
         destructive:
           "border-destructive/40 bg-destructive/14 text-red-200 [a&]:hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40",
         outline:
-          "border-[rgb(var(--theme-shade-rgb)/55%)] bg-white/[0.025] text-foreground/85 [a&]:hover:border-[#9a3045]/75 [a&]:hover:bg-[#3b0b15]/35 [a&]:hover:text-foreground",
+          "border-[rgb(var(--theme-shade-rgb)/55%)] bg-white/[0.025] text-foreground/85 [a&]:hover:border-[rgb(var(--brand-edge)/75%)] [a&]:hover:bg-[rgb(var(--brand-deep-bg)/40%)] [a&]:hover:text-foreground",
         ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
         link: "text-primary underline-offset-4 [a&]:hover:underline",
       },

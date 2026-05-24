@@ -45,6 +45,7 @@ import {
   useGenerateNutrition,
 } from '@/lib/queries/use-nutrition';
 import { cn } from '@/lib/utils';
+import { usePaletteStore } from '@/lib/stores/palette-store';
 import type { NutritionLog, NutritionPlan, RecognizedFoodItem } from '@/types/nutrition';
 
 // Meal type mapping
@@ -220,6 +221,12 @@ function MealSectionSkeleton() {
 }
 
 export default function NutritionPage() {
+  const palette = usePaletteStore((s) => s.palette);
+  const isAurora = palette === 'aurora';
+  const ringColors = isAurora
+    ? { calories: '#0d9488', protein: '#10c3aa', carbs: '#0d9488' }
+    : { calories: '#b82a3e', protein: '#ef4444', carbs: '#b82a3e' };
+  const proteinIconClass = isAurora ? 'text-primary' : 'text-red-500';
   const [currentDate, setCurrentDate] = useState(new Date());
   const [foodSheetOpen, setFoodSheetOpen] = useState(false);
   const [foodSheetMealType, setFoodSheetMealType] = useState('breakfast');
@@ -593,7 +600,7 @@ export default function NutritionPage() {
                 current={summary.total_calories}
                 target={targets.calories}
                 unit="ккал"
-                color="#b82a3e"
+                color={ringColors.calories}
                 iconColorClass="text-primary"
                 icon={Flame}
               />
@@ -602,8 +609,8 @@ export default function NutritionPage() {
                 current={summary.total_protein_g}
                 target={targets.protein}
                 unit="г"
-                color="#ef4444"
-                iconColorClass="text-red-500"
+                color={ringColors.protein}
+                iconColorClass={proteinIconClass}
                 icon={Beef}
               />
               <NutrientRing
@@ -620,7 +627,7 @@ export default function NutritionPage() {
                 current={summary.total_carbs_g}
                 target={targets.carbs}
                 unit="г"
-                color="#7b1d2e"
+                color={ringColors.carbs}
                 iconColorClass="text-primary"
                 icon={Wheat}
               />
@@ -690,57 +697,6 @@ export default function NutritionPage() {
           ))
         )}
       </div>
-
-      {/* Daily summary */}
-      <Card className="border-border/50">
-        <CardHeader>
-          <CardTitle className="text-base">Итого за день</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {summaryLoading ? (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-20 rounded-lg" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <div className="rounded-lg border border-[rgb(var(--theme-shade-rgb)/45%)] bg-white/[0.035] p-3 text-center">
-                <p className="text-lg font-bold text-primary">
-                  {fmt1(summary.total_calories)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  / {fmt1(targets.calories)} ккал
-                </p>
-              </div>
-              <div className="rounded-lg border border-[rgb(var(--theme-shade-rgb)/45%)] bg-white/[0.035] p-3 text-center">
-                <p className="text-lg font-bold text-[#f5e7ea]">
-                  {fmt1(summary.total_protein_g)}г
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  / {fmt1(targets.protein)}г белка
-                </p>
-              </div>
-              <div className="rounded-lg border border-[rgb(var(--theme-shade-rgb)/45%)] bg-white/[0.035] p-3 text-center">
-                <p className="text-lg font-bold text-muted-foreground">
-                  {fmt1(summary.total_fat_g)}г
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  / {fmt1(targets.fat)}г жиров
-                </p>
-              </div>
-              <div className="rounded-lg border border-[rgb(var(--theme-shade-rgb)/45%)] bg-white/[0.035] p-3 text-center">
-                <p className="text-lg font-bold text-primary">
-                  {fmt1(summary.total_carbs_g)}г
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  / {fmt1(targets.carbs)}г углеводов
-                </p>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Hidden file input for photo recognition */}
       <input

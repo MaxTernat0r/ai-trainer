@@ -100,7 +100,14 @@ done
 
 docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
 docker compose -f docker-compose.prod.yml run --rm backend python -m scripts.seed_db
-docker compose -f docker-compose.prod.yml up -d --force-recreate --always-recreate-deps backend frontend smtp-proxy
+# Force-recreate sometimes keeps the old image if the `latest` tag was rebuilt;
+# explicit stop+rm guarantees the new image is used. Stop nginx first because
+# it depends on frontend/backend.
+docker compose -f docker-compose.prod.yml stop nginx || true
+for svc in backend frontend smtp-proxy; do
+  docker compose -f docker-compose.prod.yml rm -sf "$svc" || true
+done
+docker compose -f docker-compose.prod.yml up -d backend frontend smtp-proxy
 
 if [[ "${SKIP_CERTBOT:-0}" == "1" ]]; then
   docker compose -f docker-compose.prod.yml -f docker-compose.bootstrap.yml up -d --force-recreate nginx
@@ -114,7 +121,8 @@ if [[ ! -f "nginx/certs/live/$DOMAIN/fullchain.pem" ]]; then
   docker compose -f docker-compose.prod.yml run --rm certbot
 fi
 
-docker compose -f docker-compose.prod.yml up -d --force-recreate nginx
+docker compose -f docker-compose.prod.yml rm -sf nginx >/dev/null 2>&1 || true
+docker compose -f docker-compose.prod.yml up -d nginx
 docker compose -f docker-compose.prod.yml ps
 REMOTE_SCRIPT
 

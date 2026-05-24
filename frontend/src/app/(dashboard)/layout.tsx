@@ -101,7 +101,7 @@ export default function DashboardLayout({
         <div className="flex h-[4.75rem] items-center justify-between border-b border-white/10 px-4">
           {sidebarOpen && (
             <Link href="/dashboard" className="flex items-center gap-2">
-              <div className="flex size-11 items-center justify-center rounded-lg border border-primary/35 bg-primary/12 text-primary shadow-[0_0_22px_rgb(190_24_42_/_16%)]">
+              <div className="flex size-11 items-center justify-center rounded-lg border border-primary/35 bg-primary/12 text-primary shadow-[0_0_22px_rgb(var(--brand-shade)/_16%)]">
                 <Dumbbell className="size-5" />
               </div>
               <div className="min-w-0">
@@ -144,13 +144,13 @@ export default function DashboardLayout({
                     className={cn(
                       'group relative flex items-center gap-3 rounded-lg border border-transparent px-3 py-3 text-sm font-semibold transition-all duration-200',
                       isActive
-                        ? 'border-primary/28 bg-primary/12 text-primary shadow-[inset_0_1px_0_rgb(255_255_255_/_8%),0_0_24px_rgb(190_24_42_/_10%)]'
+                        ? 'border-primary/28 bg-primary/12 text-primary shadow-[inset_0_1px_0_rgb(255_255_255_/_8%),0_0_24px_rgb(var(--brand-shade)/_10%)]'
                         : 'text-sidebar-foreground/70 hover:border-white/10 hover:bg-white/[0.055] hover:text-sidebar-foreground'
                     )}
                     title={item.label}
                   >
                     {isActive && (
-                      <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary shadow-[0_0_14px_rgb(190_24_42_/_55%)]" />
+                      <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary shadow-[0_0_14px_rgb(var(--brand-shade)/_55%)]" />
                     )}
                     <item.icon className="size-5 shrink-0 transition-transform duration-200 group-hover:scale-105" />
                     {sidebarOpen && <span>{item.label}</span>}
@@ -205,7 +205,7 @@ export default function DashboardLayout({
                       className={cn(
                         'rounded-md px-2 py-1.5 text-xs font-semibold transition-all',
                         isActive
-                          ? 'border border-primary/35 bg-primary/12 text-primary shadow-[0_0_18px_rgb(190_24_42_/_14%)]'
+                          ? 'border border-primary/35 bg-primary/12 text-primary shadow-[0_0_18px_rgb(var(--brand-shade)/_14%)]'
                           : 'border border-transparent text-muted-foreground hover:bg-white/[0.06] hover:text-foreground'
                       )}
                     >
@@ -265,7 +265,7 @@ export default function DashboardLayout({
               <span className="sr-only">Переключить палитру</span>
             </Button>
             <Link href="/profile">
-              <div className="flex size-10 items-center justify-center rounded-lg border border-primary/35 bg-primary/12 text-primary shadow-[0_0_20px_rgb(190_24_42_/_12%)]">
+              <div className="flex size-10 items-center justify-center rounded-lg border border-primary/35 bg-primary/12 text-primary shadow-[0_0_20px_rgb(var(--brand-shade)/_12%)]">
                 <User className="size-4" />
               </div>
             </Link>

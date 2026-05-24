@@ -155,7 +155,7 @@ function VerifyEmailContent() {
   return (
     <Card className="border-[rgb(var(--theme-shade-rgb)/65%)]">
       <CardHeader className="text-center">
-        <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-lg border border-primary/35 bg-primary/12 shadow-[0_0_20px_rgb(190_24_42_/_14%)]">
+        <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-lg border border-primary/35 bg-primary/12 shadow-[0_0_20px_rgb(var(--brand-shade)/_14%)]">
           {icon}
         </div>
         <div className="mx-auto mb-2">
