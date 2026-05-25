@@ -262,21 +262,16 @@ async def run_agent_turn(
 
     try:
         for iteration in range(MAX_ITERATIONS):
-            iter_text_buffer: list[str] = []
-
-            async def on_text_chunk(chunk: str) -> None:
-                iter_text_buffer.append(chunk)
-
             turn_result = await _stream_assistant_turn(
                 system=system_prompt,
                 messages=messages,
                 tools=TOOL_DEFINITIONS,
-                on_text_chunk=lambda c: _yield_chunk(c),  # placeholder, replaced below
+                on_text_chunk=None,
             )
 
-            # _stream_assistant_turn doesn't actually call our async wrapper
-            # because async generators can't yield from inside it; we re-stream
-            # text below from the assembled blocks.
+            # Text blocks are re-emitted below from the assembled blocks; we
+            # don't push intermediate chunks into the SSE stream here because
+            # this generator can't yield from inside _stream_assistant_turn.
             assistant_message = turn_result["message"]
             stop_reason = turn_result["stop_reason"]
             blocks = assistant_message["content"]
@@ -442,13 +437,6 @@ async def run_agent_turn(
         logger.exception("Agent turn failed")
         await db.rollback()
         yield {"type": "error", "message": "AI agent failed unexpectedly"}
-
-
-def _yield_chunk(_c: str) -> None:
-    """Placeholder: text streaming chunks are batched per content_block_stop
-    in the current implementation. Keeps the call signature stable for future
-    incremental streaming via a queue."""
-    return None
 
 
 async def resume_agent_after_approval(

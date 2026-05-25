@@ -12,6 +12,7 @@ export interface Conversation {
   is_active: boolean;
   created_at: string;
   messages: ChatMessage[];
+  tool_calls?: PersistedToolCall[];
 }
 
 export interface ConversationBrief {
@@ -94,4 +95,18 @@ export interface ToolProposal {
   resultSummary?: string;
   result?: Record<string, unknown>;
   error?: string;
+}
+
+// Backend representation of a persisted write-tool proposal returned by
+// GET /chat/conversations/{id} so we can render historical tool cards after
+// a page reload.
+export interface PersistedToolCall {
+  id: string;
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  summary: string;
+  status: 'pending' | 'approved' | 'rejected' | 'error';
+  result_summary?: string | null;
+  error?: string | null;
+  created_at: string;
 }

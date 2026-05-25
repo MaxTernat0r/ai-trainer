@@ -18,6 +18,7 @@ interface UseChatStreamReturn {
     conversationId: string,
     proposalId: string,
     approved: boolean,
+    seedProposal?: ToolProposal,
   ) => Promise<void>;
   resetStream: () => void;
 }
@@ -40,6 +41,34 @@ export function useChatStream(): UseChatStreamReturn {
   const resetStream = useCallback(() => {
     setStreamText('');
     setStreamEvents([]);
+    setPendingProposals({});
+  }, []);
+
+  const collapseAfterStreamEnd = useCallback(() => {
+    setStreamText('');
+    setStreamEvents((prev) => {
+      const resolvedIds = new Set(
+        prev
+          .filter((ev) => ev.type === 'tool_result')
+          .map((ev) => (ev as { id: string }).id),
+      );
+      const remaining = prev.filter(
+        (ev) => ev.type === 'tool_proposal' && !resolvedIds.has((ev as { id: string }).id),
+      );
+      return remaining;
+    });
+    // Drop proposals that reached a terminal state — the refetched
+    // conversation now carries them as persisted tool_calls. Keep entries
+    // still pending so the user can act on them after reload.
+    setPendingProposals((prev) => {
+      const next: Record<string, ToolProposal> = {};
+      for (const [id, proposal] of Object.entries(prev)) {
+        if (proposal.status === 'pending' || proposal.status === 'executing') {
+          next[id] = proposal;
+        }
+      }
+      return next;
+    });
   }, []);
 
   const handleEvent = useCallback((event: AgentEvent) => {
@@ -180,26 +209,32 @@ export function useChatStream(): UseChatStreamReturn {
       } finally {
         setIsStreaming(false);
         abortRef.current = null;
-        queryClient.invalidateQueries({
+        await queryClient.invalidateQueries({
           queryKey: queryKeys.chat.conversation(conversationId),
         });
         queryClient.invalidateQueries({
           queryKey: queryKeys.chat.conversations(),
         });
         QUERIES_TO_INVALIDATE_AFTER_WRITE(queryClient);
+        collapseAfterStreamEnd();
       }
     },
-    [consumeStream, fetchWithRefresh, queryClient, resetStream],
+    [collapseAfterStreamEnd, consumeStream, fetchWithRefresh, queryClient, resetStream],
   );
 
   const approveProposal = useCallback(
-    async (conversationId: string, proposalId: string, approved: boolean) => {
+    async (
+      conversationId: string,
+      proposalId: string,
+      approved: boolean,
+      seedProposal?: ToolProposal,
+    ) => {
       if (abortRef.current) abortRef.current.abort();
       const controller = new AbortController();
       abortRef.current = controller;
 
       setPendingProposals((prev) => {
-        const existing = prev[proposalId];
+        const existing = prev[proposalId] ?? seedProposal;
         if (!existing) return prev;
         return {
           ...prev,
@@ -226,13 +261,14 @@ export function useChatStream(): UseChatStreamReturn {
       } finally {
         setIsStreaming(false);
         abortRef.current = null;
-        queryClient.invalidateQueries({
+        await queryClient.invalidateQueries({
           queryKey: queryKeys.chat.conversation(conversationId),
         });
         QUERIES_TO_INVALIDATE_AFTER_WRITE(queryClient);
+        collapseAfterStreamEnd();
       }
     },
-    [consumeStream, fetchWithRefresh, queryClient],
+    [collapseAfterStreamEnd, consumeStream, fetchWithRefresh, queryClient],
   );
 
   return {

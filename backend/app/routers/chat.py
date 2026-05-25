@@ -10,6 +10,7 @@ import app.db.base  # noqa: F401 — ensure all models are registered for relati
 from app.core.exceptions import NotFoundError
 from app.db.session import get_async_session
 from app.dependencies import get_current_user
+from app.models.agent import AgentToolCall
 from app.models.chat import ChatConversation, ChatMessage
 from app.models.user import User
 from app.schemas.chat import (
@@ -18,6 +19,7 @@ from app.schemas.chat import (
     ConversationCreate,
     ConversationListRead,
     ConversationRead,
+    ToolCallRead,
     ToolProposalApprove,
 )
 
@@ -85,6 +87,49 @@ async def get_conversation(
     if not conv:
         raise NotFoundError("Conversation")
 
+    tool_calls_result = await db.execute(
+        select(AgentToolCall)
+        .where(
+            AgentToolCall.conversation_id == conv.id,
+            AgentToolCall.user_id == user.id,
+            AgentToolCall.is_proposal.is_(True),
+        )
+        .order_by(AgentToolCall.created_at)
+    )
+    from app.services.ai.agent_tools import summarize_proposal, summarize_tool_result
+
+    tool_calls = []
+    for tc in tool_calls_result.scalars():
+        if tc.is_approved is None:
+            status = "pending"
+        elif tc.is_approved is False:
+            status = "rejected"
+        elif tc.error:
+            status = "error"
+        else:
+            status = "approved"
+
+        raw_input = tc.arguments.get("input", {}) if isinstance(tc.arguments, dict) else {}
+        result_summary = None
+        if status == "approved" and tc.result is not None:
+            try:
+                result_summary = summarize_tool_result(tc.tool_name, tc.result)
+            except Exception:
+                result_summary = "Готово"
+
+        tool_calls.append(
+            ToolCallRead(
+                id=str(tc.id),
+                tool_name=tc.tool_name,
+                arguments=raw_input,
+                summary=summarize_proposal(tc.tool_name, raw_input),
+                status=status,
+                result_summary=result_summary,
+                error=tc.error,
+                created_at=tc.created_at,
+            )
+        )
+
     return ConversationRead(
         id=str(conv.id),
         title=conv.title,
@@ -99,6 +144,7 @@ async def get_conversation(
             )
             for m in conv.messages
         ],
+        tool_calls=tool_calls,
     )
 
 

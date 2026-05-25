@@ -37,6 +37,7 @@ import { useChatStream } from '@/lib/hooks/use-chat-stream';
 import type {
   AgentEvent,
   ChatMessage,
+  PersistedToolCall,
   ToolProposal,
 } from '@/types/chat';
 import { ToolCard } from '@/components/chat/tool-card';
@@ -124,35 +125,70 @@ export default function ChatPage() {
     resetStream();
   }, [activeConversationId, resetStream]);
 
-  const messages: ChatMessage[] = useMemo(() => {
-    const base = activeConversation?.messages ?? [];
-    const result = [...base];
+  const timeline = useMemo(() => {
+    type TimelineItem =
+      | { kind: 'message'; data: ChatMessage; sortKey: string }
+      | { kind: 'tool'; data: PersistedToolCall; sortKey: string };
+
+    const persistedMessages = activeConversation?.messages ?? [];
+    const persistedToolCalls = activeConversation?.tool_calls ?? [];
+
+    const items: TimelineItem[] = [];
+
+    for (const m of persistedMessages) {
+      items.push({ kind: 'message', data: m, sortKey: m.created_at });
+    }
+
+    // Hide persisted tool cards whose ids are currently live in pendingProposals
+    // (the streaming bubble owns them until collapseAfterStreamEnd fires).
+    for (const tc of persistedToolCalls) {
+      if (pendingProposals[tc.id]) continue;
+      items.push({ kind: 'tool', data: tc, sortKey: tc.created_at });
+    }
+
+    items.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
     if (pendingUserMessage) {
-      const lastUserInBase = [...base].reverse().find((m) => m.role === 'user');
+      const lastUserInBase = [...persistedMessages].reverse().find((m) => m.role === 'user');
       const alreadyShown = lastUserInBase?.content.trim() === pendingUserMessage.trim();
       if (!alreadyShown) {
-        result.push({
-          id: '__pending_user__',
-          role: 'user',
-          content: pendingUserMessage,
-          created_at: new Date().toISOString(),
+        items.push({
+          kind: 'message',
+          data: {
+            id: '__pending_user__',
+            role: 'user',
+            content: pendingUserMessage,
+            created_at: new Date().toISOString(),
+          },
+          sortKey: new Date().toISOString(),
         });
       }
     }
 
     if (isStreaming || streamEvents.length > 0) {
-      result.push({
-        id: '__streaming__',
-        role: 'assistant',
-        content: streamText,
-        created_at: new Date().toISOString(),
-        tool_events: streamEvents,
+      items.push({
+        kind: 'message',
+        data: {
+          id: '__streaming__',
+          role: 'assistant',
+          content: streamText,
+          created_at: new Date().toISOString(),
+          tool_events: streamEvents,
+        },
+        sortKey: '￿', // always last
       });
     }
 
-    return result;
-  }, [activeConversation?.messages, pendingUserMessage, isStreaming, streamEvents, streamText]);
+    return items;
+  }, [
+    activeConversation?.messages,
+    activeConversation?.tool_calls,
+    pendingProposals,
+    pendingUserMessage,
+    isStreaming,
+    streamEvents,
+    streamText,
+  ]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -160,7 +196,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, streamText, streamEvents, scrollToBottom]);
+  }, [timeline, streamText, streamEvents, scrollToBottom]);
 
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isStreaming) return;
@@ -189,10 +225,14 @@ export default function ChatPage() {
     }
   };
 
-  const handleApproveProposal = async (proposalId: string, approved: boolean) => {
+  const handleApproveProposal = async (
+    proposalId: string,
+    approved: boolean,
+    seedProposal?: ToolProposal,
+  ) => {
     if (!activeConversationId || isStreaming) return;
     try {
-      await approveProposal(activeConversationId, proposalId, approved);
+      await approveProposal(activeConversationId, proposalId, approved, seedProposal);
     } catch {
       toast.error('Не удалось обработать действие');
     }
@@ -219,7 +259,7 @@ export default function ChatPage() {
     return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   };
 
-  const hasMessages = messages.length > 0;
+  const hasMessages = timeline.length > 0;
 
   const renderConversationList = (onSelect?: () => void) => (
     <div className="flex h-full flex-col">
@@ -302,6 +342,16 @@ export default function ChatPage() {
       </div>
     </div>
   );
+
+  const persistedToProposal = (tc: PersistedToolCall): ToolProposal => ({
+    id: tc.id,
+    name: tc.tool_name,
+    arguments: tc.arguments,
+    summary: tc.summary,
+    status: tc.status,
+    resultSummary: tc.result_summary ?? undefined,
+    error: tc.error ?? undefined,
+  });
 
   const renderAssistantBubble = (message: ChatMessage) => {
     if (message.id !== '__streaming__') {
@@ -510,51 +560,74 @@ export default function ChatPage() {
                 </div>
               </div>
             ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={cn(
-                    'flex gap-3',
-                    message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
-                  )}
-                >
-                  <div
-                    className={cn(
-                      'flex size-8 shrink-0 items-center justify-center rounded-full',
-                      message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
-                    )}
-                  >
-                    {message.role === 'user' ? <User className="size-4" /> : <Bot className="size-4" />}
-                  </div>
+              timeline.map((item) => {
+                if (item.kind === 'tool') {
+                  const tc = item.data;
+                  const proposal = persistedToProposal(tc);
+                  return (
+                    <div key={`tool-${tc.id}`} className="flex gap-3">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                        <Bot className="size-4" />
+                      </div>
+                      <div className="max-w-[80%] flex-1">
+                        <ToolProposalCard
+                          proposal={proposal}
+                          disabled={isStreaming}
+                          onApprove={() => handleApproveProposal(tc.id, true, proposal)}
+                          onReject={() => handleApproveProposal(tc.id, false, proposal)}
+                        />
+                      </div>
+                    </div>
+                  );
+                }
 
+                const message = item.data;
+                return (
                   <div
+                    key={message.id}
                     className={cn(
-                      'max-w-[80%] rounded-2xl px-4 py-2.5',
-                      message.role === 'user' ? 'bg-primary/15 text-foreground' : 'bg-muted'
+                      'flex gap-3',
+                      message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
                     )}
                   >
-                    {message.role === 'user' ? (
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
-                    ) : (
-                      renderAssistantBubble(message)
-                    )}
-                    {message.id !== '__streaming__' && (
-                      <p
-                        className={cn(
-                          'mt-1 text-right text-xs',
-                          message.role === 'user'
-                            ? 'text-primary-foreground/70'
-                            : 'text-muted-foreground'
-                        )}
-                      >
-                        {formatTime(message.created_at)}
-                      </p>
-                    )}
+                    <div
+                      className={cn(
+                        'flex size-8 shrink-0 items-center justify-center rounded-full',
+                        message.role === 'user'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted'
+                      )}
+                    >
+                      {message.role === 'user' ? <User className="size-4" /> : <Bot className="size-4" />}
+                    </div>
+
+                    <div
+                      className={cn(
+                        'max-w-[80%] rounded-2xl px-4 py-2.5',
+                        message.role === 'user' ? 'bg-primary/15 text-foreground' : 'bg-muted'
+                      )}
+                    >
+                      {message.role === 'user' ? (
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+                      ) : (
+                        renderAssistantBubble(message)
+                      )}
+                      {message.id !== '__streaming__' && (
+                        <p
+                          className={cn(
+                            'mt-1 text-right text-xs',
+                            message.role === 'user'
+                              ? 'text-primary-foreground/70'
+                              : 'text-muted-foreground'
+                          )}
+                        >
+                          {formatTime(message.created_at)}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
             <div ref={messagesEndRef} />
           </div>
