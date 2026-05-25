@@ -500,7 +500,7 @@ async def resume_agent_after_approval(
         proposal.is_approved = False
         proposal.approved_at = datetime.now(timezone.utc)
         proposal.error = "User cancelled"
-        await db.flush()
+        await db.commit()
 
         # Feed cancellation back to Claude as a tool_result error
         pending_messages.append({
@@ -537,7 +537,9 @@ async def resume_agent_after_approval(
             proposal.result = (
                 result if isinstance(result, dict) else {"value": result}
             )
-            await db.flush()
+            # Commit immediately so the executed write survives even if the
+            # follow-up Claude turn errors out (and triggers rollback below).
+            await db.commit()
 
             yield {
                 "type": "tool_result",
@@ -561,7 +563,7 @@ async def resume_agent_after_approval(
             proposal.is_approved = True  # action ran, but failed
             proposal.approved_at = datetime.now(timezone.utc)
             proposal.error = str(exc)
-            await db.flush()
+            await db.commit()
 
             yield {
                 "type": "tool_result",
@@ -586,7 +588,7 @@ async def resume_agent_after_approval(
             proposal.is_approved = True
             proposal.approved_at = datetime.now(timezone.utc)
             proposal.error = repr(exc)
-            await db.flush()
+            await db.commit()
 
             yield {
                 "type": "tool_result",
