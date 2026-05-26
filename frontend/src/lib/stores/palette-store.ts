@@ -3,7 +3,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type Palette = 'crimson' | 'aurora';
+export type Palette =
+  | 'crimson'
+  | 'aurora'
+  | 'violet'
+  | 'cyan'
+  | 'emerald'
+  | 'amber';
 
 interface PaletteState {
   palette: Palette;
@@ -14,7 +20,20 @@ interface PaletteState {
 const PALETTE_CLASS: Record<Palette, string> = {
   crimson: 'theme-crimson',
   aurora: 'theme-aurora',
+  violet: 'theme-violet',
+  cyan: 'theme-cyan',
+  emerald: 'theme-emerald',
+  amber: 'theme-amber',
 };
+
+export const PALETTE_ORDER: readonly Palette[] = [
+  'crimson',
+  'aurora',
+  'violet',
+  'cyan',
+  'emerald',
+  'amber',
+] as const;
 
 const ALL_PALETTE_CLASSES = Object.values(PALETTE_CLASS);
 
@@ -41,7 +60,9 @@ export const usePaletteStore = create<PaletteState>()(
     (set, get) => ({
       palette: 'crimson',
       cyclePalette: () => {
-        const next: Palette = get().palette === 'crimson' ? 'aurora' : 'crimson';
+        const current = get().palette;
+        const idx = PALETTE_ORDER.indexOf(current);
+        const next = PALETTE_ORDER[(idx + 1) % PALETTE_ORDER.length];
         applyPaletteToDom(next);
         set({ palette: next });
       },

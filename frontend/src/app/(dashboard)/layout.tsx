@@ -38,7 +38,7 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { palette, cyclePalette } = usePaletteStore();
+  const { palette, cyclePalette, setPalette } = usePaletteStore();
   const { sidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
   const { data: profile, isLoading: profileLoading } = useProfile();
   const [isMobile, setIsMobile] = useState(false);
@@ -184,12 +184,16 @@ export default function DashboardLayout({
               <div
                 role="radiogroup"
                 aria-label="Палитра"
-                className="grid grid-cols-2 gap-1 rounded-lg border border-white/10 bg-white/[0.04] p-1"
+                className="grid grid-cols-3 gap-1 rounded-lg border border-white/10 bg-white/[0.04] p-1"
               >
                 {(
                   [
                     { id: 'crimson', label: 'Crimson' },
                     { id: 'aurora', label: 'Aurora' },
+                    { id: 'violet', label: 'Violet' },
+                    { id: 'cyan', label: 'Cyan' },
+                    { id: 'emerald', label: 'Emerald' },
+                    { id: 'amber', label: 'Amber' },
                   ] as const
                 ).map((p) => {
                   const isActive = palette === p.id;
@@ -200,7 +204,7 @@ export default function DashboardLayout({
                       role="radio"
                       aria-checked={isActive}
                       onClick={() => {
-                        if (!isActive) cyclePalette();
+                        if (!isActive) setPalette(p.id);
                       }}
                       className={cn(
                         'rounded-md px-2 py-1.5 text-xs font-semibold transition-all',
@@ -259,7 +263,7 @@ export default function DashboardLayout({
               variant="ghost"
               size="icon"
               onClick={cyclePalette}
-              title={palette === 'crimson' ? 'Сменить тему: Aurora' : 'Сменить тему: Crimson'}
+              title={`Сменить тему (текущая: ${palette})`}
             >
               <Palette className="size-4" />
               <span className="sr-only">Переключить палитру</span>

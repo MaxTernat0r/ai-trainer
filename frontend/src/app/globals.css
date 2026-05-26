@@ -208,6 +208,222 @@
   --sidebar-ring: oklch(0.78 0.14 188);
 }
 
+/* design.md: violet — премиум фиолетовый, hue 295 */
+.theme-violet {
+  --brand-accent: 168 95 224;
+  --brand-deep: 64 38 120;
+  --brand-shade: 96 64 160;
+  --brand-tint: 200 150 240;
+  --brand-edge: 130 90 175;
+  --brand-deep-bg: 24 14 48;
+  --theme-shade-color: #5f3da8;
+  --theme-shade-rgb: 95 61 168;
+  --theme-glow-color: rgb(168 95 224 / 14%);
+  --coach-surface-gradient: linear-gradient(104.52deg, rgb(var(--brand-deep) / 22%) -19.33%, rgb(8 6 18 / 58%) 60.29%);
+  --coach-body-gradient:
+    linear-gradient(115deg, rgb(8 4 16 / 52%) 0%, rgb(14 8 24 / 38%) 46%, rgb(6 4 14 / 60%) 100%),
+    radial-gradient(ellipse at 18% 12%, rgb(168 95 224 / 16%), transparent 56%),
+    radial-gradient(ellipse at 82% 88%, rgb(168 95 224 / 12%), transparent 60%),
+    radial-gradient(circle at 60% 36%, rgb(200 150 240 / 10%), transparent 64%),
+    linear-gradient(160deg, rgb(18 10 32) 0%, rgb(8 4 18) 60%, rgb(4 2 12) 100%);
+  --coach-body-overlay-a:
+    radial-gradient(circle at 8% 84%, rgb(168 95 224 / 18%), transparent 34%),
+    linear-gradient(104.52deg, rgb(168 95 224 / 9%) -19.33%, rgb(28 16 48 / 18%) 60.29%);
+  --background: oklch(0.05 0.022 295);
+  --foreground: oklch(0.955 0.01 295);
+  --card: oklch(0.1 0.04 295 / 92%);
+  --card-foreground: oklch(0.955 0.01 295);
+  --popover: oklch(0.085 0.04 295);
+  --popover-foreground: oklch(0.955 0.01 295);
+  --primary: oklch(0.72 0.16 295);
+  --primary-foreground: oklch(0.98 0.008 295);
+  --secondary: oklch(0.12 0.04 295 / 90%);
+  --secondary-foreground: oklch(0.92 0.012 295);
+  --muted: oklch(0.115 0.03 295 / 82%);
+  --muted-foreground: oklch(0.72 0.025 295);
+  --accent: oklch(0.74 0.16 295);
+  --accent-foreground: oklch(0.98 0.01 295);
+  --destructive: oklch(0.64 0.2 22);
+  --border: oklch(0.72 0.14 295 / 30%);
+  --input: oklch(0.94 0.02 295 / 13%);
+  --ring: oklch(0.74 0.16 295);
+  --chart-1: oklch(0.72 0.16 295);
+  --chart-2: oklch(0.74 0.035 295);
+  --chart-3: oklch(0.55 0.14 295);
+  --chart-4: oklch(0.86 0.01 295);
+  --chart-5: oklch(0.4 0.1 295);
+  --sidebar: oklch(0.06 0.025 295 / 94%);
+  --sidebar-foreground: oklch(0.93 0.018 295);
+  --sidebar-primary: oklch(0.72 0.16 295);
+  --sidebar-primary-foreground: oklch(0.98 0.008 295);
+  --sidebar-accent: oklch(0.115 0.04 295 / 80%);
+  --sidebar-accent-foreground: oklch(0.96 0.02 295);
+  --sidebar-border: oklch(0.72 0.14 295 / 30%);
+  --sidebar-ring: oklch(0.74 0.16 295);
+}
+
+/* design.md: cyan — технологичный, hue 198 */
+.theme-cyan {
+  --brand-accent: 78 192 216;
+  --brand-deep: 22 80 100;
+  --brand-shade: 30 110 135;
+  --brand-tint: 130 220 235;
+  --brand-edge: 80 160 180;
+  --brand-deep-bg: 6 26 34;
+  --theme-shade-color: #1d6e87;
+  --theme-shade-rgb: 29 110 135;
+  --theme-glow-color: rgb(78 192 216 / 14%);
+  --coach-surface-gradient: linear-gradient(104.52deg, rgb(var(--brand-deep) / 22%) -19.33%, rgb(2 12 16 / 58%) 60.29%);
+  --coach-body-gradient:
+    linear-gradient(115deg, rgb(0 6 10 / 52%) 0%, rgb(2 12 16 / 38%) 46%, rgb(0 4 8 / 60%) 100%),
+    radial-gradient(ellipse at 18% 12%, rgb(78 192 216 / 16%), transparent 56%),
+    radial-gradient(ellipse at 82% 88%, rgb(78 192 216 / 12%), transparent 60%),
+    radial-gradient(circle at 60% 36%, rgb(130 220 235 / 10%), transparent 64%),
+    linear-gradient(160deg, rgb(2 16 22) 0%, rgb(0 8 12) 60%, rgb(0 4 8) 100%);
+  --coach-body-overlay-a:
+    radial-gradient(circle at 8% 84%, rgb(78 192 216 / 18%), transparent 34%),
+    linear-gradient(104.52deg, rgb(78 192 216 / 9%) -19.33%, rgb(8 26 36 / 18%) 60.29%);
+  --background: oklch(0.05 0.022 198);
+  --foreground: oklch(0.955 0.01 198);
+  --card: oklch(0.1 0.04 198 / 92%);
+  --card-foreground: oklch(0.955 0.01 198);
+  --popover: oklch(0.085 0.04 198);
+  --popover-foreground: oklch(0.955 0.01 198);
+  --primary: oklch(0.74 0.13 198);
+  --primary-foreground: oklch(0.98 0.008 198);
+  --secondary: oklch(0.12 0.04 198 / 90%);
+  --secondary-foreground: oklch(0.92 0.012 198);
+  --muted: oklch(0.115 0.03 198 / 82%);
+  --muted-foreground: oklch(0.72 0.025 198);
+  --accent: oklch(0.78 0.13 198);
+  --accent-foreground: oklch(0.98 0.01 198);
+  --destructive: oklch(0.64 0.2 22);
+  --border: oklch(0.74 0.12 198 / 30%);
+  --input: oklch(0.94 0.02 198 / 13%);
+  --ring: oklch(0.78 0.14 198);
+  --chart-1: oklch(0.74 0.13 198);
+  --chart-2: oklch(0.74 0.035 198);
+  --chart-3: oklch(0.55 0.12 198);
+  --chart-4: oklch(0.86 0.01 198);
+  --chart-5: oklch(0.4 0.09 198);
+  --sidebar: oklch(0.06 0.025 198 / 94%);
+  --sidebar-foreground: oklch(0.93 0.018 198);
+  --sidebar-primary: oklch(0.74 0.13 198);
+  --sidebar-primary-foreground: oklch(0.98 0.008 198);
+  --sidebar-accent: oklch(0.115 0.04 198 / 80%);
+  --sidebar-accent-foreground: oklch(0.96 0.02 198);
+  --sidebar-border: oklch(0.74 0.12 198 / 30%);
+  --sidebar-ring: oklch(0.78 0.14 198);
+}
+
+/* design.md: emerald — спокойный, hue 165 */
+.theme-emerald {
+  --brand-accent: 50 200 140;
+  --brand-deep: 14 88 70;
+  --brand-shade: 22 110 88;
+  --brand-tint: 120 225 180;
+  --brand-edge: 70 165 130;
+  --brand-deep-bg: 6 30 24;
+  --theme-shade-color: #186e58;
+  --theme-shade-rgb: 24 110 88;
+  --theme-glow-color: rgb(50 200 140 / 14%);
+  --coach-surface-gradient: linear-gradient(104.52deg, rgb(var(--brand-deep) / 22%) -19.33%, rgb(2 12 10 / 58%) 60.29%);
+  --coach-body-gradient:
+    linear-gradient(115deg, rgb(0 8 6 / 52%) 0%, rgb(2 14 10 / 38%) 46%, rgb(0 6 4 / 60%) 100%),
+    radial-gradient(ellipse at 18% 12%, rgb(50 200 140 / 16%), transparent 56%),
+    radial-gradient(ellipse at 82% 88%, rgb(50 200 140 / 12%), transparent 60%),
+    radial-gradient(circle at 60% 36%, rgb(120 225 180 / 10%), transparent 64%),
+    linear-gradient(160deg, rgb(2 20 16) 0%, rgb(0 10 8) 60%, rgb(0 6 4) 100%);
+  --coach-body-overlay-a:
+    radial-gradient(circle at 8% 84%, rgb(50 200 140 / 18%), transparent 34%),
+    linear-gradient(104.52deg, rgb(50 200 140 / 9%) -19.33%, rgb(8 30 24 / 18%) 60.29%);
+  --background: oklch(0.05 0.022 165);
+  --foreground: oklch(0.955 0.01 165);
+  --card: oklch(0.1 0.04 165 / 92%);
+  --card-foreground: oklch(0.955 0.01 165);
+  --popover: oklch(0.085 0.04 165);
+  --popover-foreground: oklch(0.955 0.01 165);
+  --primary: oklch(0.74 0.13 165);
+  --primary-foreground: oklch(0.98 0.008 165);
+  --secondary: oklch(0.12 0.04 165 / 90%);
+  --secondary-foreground: oklch(0.92 0.012 165);
+  --muted: oklch(0.115 0.03 165 / 82%);
+  --muted-foreground: oklch(0.72 0.025 165);
+  --accent: oklch(0.78 0.13 165);
+  --accent-foreground: oklch(0.98 0.01 165);
+  --destructive: oklch(0.64 0.2 22);
+  --border: oklch(0.74 0.12 165 / 30%);
+  --input: oklch(0.94 0.02 165 / 13%);
+  --ring: oklch(0.78 0.14 165);
+  --chart-1: oklch(0.74 0.13 165);
+  --chart-2: oklch(0.74 0.035 165);
+  --chart-3: oklch(0.55 0.12 165);
+  --chart-4: oklch(0.86 0.01 165);
+  --chart-5: oklch(0.4 0.09 165);
+  --sidebar: oklch(0.06 0.025 165 / 94%);
+  --sidebar-foreground: oklch(0.93 0.018 165);
+  --sidebar-primary: oklch(0.74 0.13 165);
+  --sidebar-primary-foreground: oklch(0.98 0.008 165);
+  --sidebar-accent: oklch(0.115 0.04 165 / 80%);
+  --sidebar-accent-foreground: oklch(0.96 0.02 165);
+  --sidebar-border: oklch(0.74 0.12 165 / 30%);
+  --sidebar-ring: oklch(0.78 0.14 165);
+}
+
+/* design.md: amber — тёплый, дорогой, hue 70 */
+.theme-amber {
+  --brand-accent: 220 170 60;
+  --brand-deep: 110 80 18;
+  --brand-shade: 145 110 36;
+  --brand-tint: 240 205 110;
+  --brand-edge: 185 150 70;
+  --brand-deep-bg: 36 24 6;
+  --theme-shade-color: #8a6920;
+  --theme-shade-rgb: 138 105 32;
+  --theme-glow-color: rgb(220 170 60 / 14%);
+  --coach-surface-gradient: linear-gradient(104.52deg, rgb(var(--brand-deep) / 22%) -19.33%, rgb(14 10 4 / 58%) 60.29%);
+  --coach-body-gradient:
+    linear-gradient(115deg, rgb(10 8 4 / 52%) 0%, rgb(16 12 6 / 38%) 46%, rgb(8 6 2 / 60%) 100%),
+    radial-gradient(ellipse at 18% 12%, rgb(220 170 60 / 16%), transparent 56%),
+    radial-gradient(ellipse at 82% 88%, rgb(220 170 60 / 12%), transparent 60%),
+    radial-gradient(circle at 60% 36%, rgb(240 205 110 / 10%), transparent 64%),
+    linear-gradient(160deg, rgb(22 16 6) 0%, rgb(12 8 2) 60%, rgb(6 4 0) 100%);
+  --coach-body-overlay-a:
+    radial-gradient(circle at 8% 84%, rgb(220 170 60 / 18%), transparent 34%),
+    linear-gradient(104.52deg, rgb(220 170 60 / 9%) -19.33%, rgb(34 24 8 / 18%) 60.29%);
+  --background: oklch(0.05 0.022 70);
+  --foreground: oklch(0.955 0.01 70);
+  --card: oklch(0.1 0.04 70 / 92%);
+  --card-foreground: oklch(0.955 0.01 70);
+  --popover: oklch(0.085 0.04 70);
+  --popover-foreground: oklch(0.955 0.01 70);
+  --primary: oklch(0.78 0.16 70);
+  --primary-foreground: oklch(0.98 0.008 70);
+  --secondary: oklch(0.12 0.04 70 / 90%);
+  --secondary-foreground: oklch(0.92 0.012 70);
+  --muted: oklch(0.115 0.03 70 / 82%);
+  --muted-foreground: oklch(0.74 0.025 70);
+  --accent: oklch(0.8 0.15 70);
+  --accent-foreground: oklch(0.98 0.01 70);
+  --destructive: oklch(0.64 0.2 22);
+  --border: oklch(0.78 0.14 70 / 30%);
+  --input: oklch(0.94 0.02 70 / 13%);
+  --ring: oklch(0.8 0.15 70);
+  --chart-1: oklch(0.78 0.16 70);
+  --chart-2: oklch(0.74 0.035 70);
+  --chart-3: oklch(0.58 0.14 70);
+  --chart-4: oklch(0.86 0.01 70);
+  --chart-5: oklch(0.42 0.1 70);
+  --sidebar: oklch(0.06 0.025 70 / 94%);
+  --sidebar-foreground: oklch(0.93 0.018 70);
+  --sidebar-primary: oklch(0.78 0.16 70);
+  --sidebar-primary-foreground: oklch(0.98 0.008 70);
+  --sidebar-accent: oklch(0.115 0.04 70 / 80%);
+  --sidebar-accent-foreground: oklch(0.96 0.02 70);
+  --sidebar-border: oklch(0.78 0.14 70 / 30%);
+  --sidebar-ring: oklch(0.8 0.15 70);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
