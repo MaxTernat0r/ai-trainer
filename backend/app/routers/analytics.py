@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, func
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.db.base  # noqa: F401 — ensure all models are registered for relationships
@@ -60,29 +60,21 @@ async def log_weight(
 ):
     logged_date = _parse_optional_date(data.logged_at)
 
-    # Idempotent per day: a unique index on (user_id, logged_at) means a
-    # double-tap or "I weighed myself again" both end up on the same row,
-    # so weight_change_30d doesn't flicker between two same-day samples.
-    log = WeightLog(
-        user_id=user.id,
-        weight_kg=data.weight_kg,
-        logged_at=logged_date,
-    )
-    db.add(log)
-    try:
-        await db.flush()
-    except IntegrityError:
-        await db.rollback()
-        existing = await db.execute(
-            select(WeightLog).where(
-                WeightLog.user_id == user.id,
-                WeightLog.logged_at == logged_date,
-            )
+    # Idempotent per day: ON CONFLICT (user_id, logged_at) DO UPDATE.
+    # The unique index uq_weight_logs_user_date backs this.
+    # Doing it as a single statement avoids the post-IntegrityError rollback
+    # path that breaks the asyncpg greenlet under FastAPI's session dep.
+    stmt = (
+        pg_insert(WeightLog)
+        .values(user_id=user.id, weight_kg=data.weight_kg, logged_at=logged_date)
+        .on_conflict_do_update(
+            index_elements=["user_id", "logged_at"],
+            set_={"weight_kg": data.weight_kg},
         )
-        log = existing.scalar_one()
-        log.weight_kg = data.weight_kg
-        await db.flush()
-    return WeightLogRead(id=str(log.id), weight_kg=log.weight_kg, logged_at=log.logged_at)
+        .returning(WeightLog.id, WeightLog.weight_kg, WeightLog.logged_at)
+    )
+    row = (await db.execute(stmt)).one()
+    return WeightLogRead(id=str(row.id), weight_kg=row.weight_kg, logged_at=row.logged_at)
 
 
 @router.get("/weight", response_model=list[WeightLogRead])
@@ -125,34 +117,35 @@ async def log_measurement(
     db: AsyncSession = Depends(get_async_session),
 ):
     logged_date = _parse_optional_date(data.logged_at)
-    log = MeasurementLog(
-        user_id=user.id,
-        measurement_type=data.measurement_type,
-        value_cm=data.value_cm,
-        logged_at=logged_date,
-    )
-    db.add(log)
-    try:
-        await db.flush()
-    except IntegrityError:
-        # Unique on (user_id, measurement_type, logged_at) — overwrite the
-        # existing same-day measurement instead of creating a duplicate row.
-        await db.rollback()
-        existing = await db.execute(
-            select(MeasurementLog).where(
-                MeasurementLog.user_id == user.id,
-                MeasurementLog.measurement_type == data.measurement_type,
-                MeasurementLog.logged_at == logged_date,
-            )
+
+    # ON CONFLICT (user_id, measurement_type, logged_at) DO UPDATE — see
+    # log_weight for why we do this in one statement instead of catching
+    # IntegrityError. uq_measurement_logs_user_type_date backs this.
+    stmt = (
+        pg_insert(MeasurementLog)
+        .values(
+            user_id=user.id,
+            measurement_type=data.measurement_type,
+            value_cm=data.value_cm,
+            logged_at=logged_date,
         )
-        log = existing.scalar_one()
-        log.value_cm = data.value_cm
-        await db.flush()
+        .on_conflict_do_update(
+            index_elements=["user_id", "measurement_type", "logged_at"],
+            set_={"value_cm": data.value_cm},
+        )
+        .returning(
+            MeasurementLog.id,
+            MeasurementLog.measurement_type,
+            MeasurementLog.value_cm,
+            MeasurementLog.logged_at,
+        )
+    )
+    row = (await db.execute(stmt)).one()
     return MeasurementRead(
-        id=str(log.id),
-        measurement_type=log.measurement_type,
-        value_cm=log.value_cm,
-        logged_at=log.logged_at,
+        id=str(row.id),
+        measurement_type=row.measurement_type,
+        value_cm=row.value_cm,
+        logged_at=row.logged_at,
     )
 
 

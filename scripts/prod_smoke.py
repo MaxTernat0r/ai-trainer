@@ -103,7 +103,7 @@ class SmokeRunner:
         steps: list[tuple[str, Callable[[], None]]] = [
             ("frontend root HTTPS", self.frontend_root),
             ("frontend register page", self.frontend_register),
-            ("backend openapi", self.backend_openapi),
+            ("backend register endpoint", self.backend_register_probe),
             ("auth register", self.auth_register),
             ("auth login", self.auth_login),
             ("frontend refresh proxy", self.frontend_refresh_proxy),
@@ -162,11 +162,17 @@ class SmokeRunner:
         response = self.request("GET", "/register", api=False)
         assert "text/html" in response.headers.get("content-type", "")
 
-    def backend_openapi(self) -> None:
-        response = self.request("GET", "/openapi.json", api=False)
-        data = response.json()
-        assert data["info"]["title"]
-        assert "/api/v1/auth/register" in data["paths"]
+    def backend_register_probe(self) -> None:
+        # /openapi.json is intentionally not exposed publicly. Confirm backend
+        # reachability via the register endpoint with bad payload — should
+        # return 422, not 502/504.
+        response = self.request(
+            "POST",
+            "/auth/register",
+            json={},
+            expected=(422,),
+        )
+        assert "detail" in response.json()
 
     def auth_register(self) -> None:
         response = self.request(
@@ -228,9 +234,9 @@ class SmokeRunner:
                 "experience_level": "intermediate",
                 "goal": "muscle_gain",
                 "sport_type": "gym",
-                "activity_level": "moderately_active",
+                "activity_level": "moderate",
                 "target_weight_kg": 80,
-                "equipment_available": "gym",
+                "equipment_available": "full_gym",
                 "training_days_per_week": 3,
                 "meals_per_day": 4,
                 "food_allergies": "",

@@ -207,7 +207,7 @@ async def log_set(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    from sqlalchemy.exc import IntegrityError
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
 
     from app.core.exceptions import BadRequestError, ConflictError
 
@@ -245,7 +245,33 @@ async def log_set(
         if sw_owner.scalar_one_or_none() is None:
             raise NotFoundError("Scheduled workout")
 
+    completed_at = datetime.now(timezone.utc)
+    stmt = (
+        pg_insert(ExerciseSet)
+        .values(
+            workout_exercise_id=workout_exercise_id,
+            scheduled_workout_id=data.scheduled_workout_id,
+            set_number=data.set_number,
+            reps_completed=data.reps_completed,
+            weight_kg=data.weight_kg,
+            duration_seconds=data.duration_seconds,
+            is_warmup=data.is_warmup,
+            completed_at=completed_at,
+        )
+        .on_conflict_do_nothing(
+            index_elements=["workout_exercise_id", "scheduled_workout_id", "set_number"],
+            index_where=ExerciseSet.scheduled_workout_id.isnot(None),
+        )
+        .returning(ExerciseSet.id)
+    )
+    inserted_id = (await db.execute(stmt)).scalar_one_or_none()
+    if inserted_id is None:
+        # Same (workout_exercise, scheduled_workout, set_number) already
+        # exists — surface as 409 so the client knows it was a double-tap.
+        raise ConflictError("Set already logged")
+
     exercise_set = ExerciseSet(
+        id=inserted_id,
         workout_exercise_id=workout_exercise_id,
         scheduled_workout_id=data.scheduled_workout_id,
         set_number=data.set_number,
@@ -253,16 +279,8 @@ async def log_set(
         weight_kg=data.weight_kg,
         duration_seconds=data.duration_seconds,
         is_warmup=data.is_warmup,
-        completed_at=datetime.now(timezone.utc),
+        completed_at=completed_at,
     )
-    db.add(exercise_set)
-    try:
-        await db.flush()
-    except IntegrityError:
-        # The unique index `(workout_exercise_id, scheduled_workout_id, set_number)`
-        # protects against double-tap retries from the client.
-        await db.rollback()
-        raise ConflictError("Set already logged")
 
     return ExerciseSetRead(
         id=str(exercise_set.id),
@@ -333,41 +351,35 @@ async def _find_or_create_scheduled_workout(
 ) -> "ScheduledWorkout":
     """Race-safe find-or-create for ScheduledWorkout(session_id, date).
 
-    A unique index on (workout_session_id, scheduled_date) backs this — on
-    the unlucky concurrent insert, IntegrityError fires and we re-fetch.
+    Uses INSERT ... ON CONFLICT DO NOTHING so the conflict path stays inside
+    a single statement — catching IntegrityError after a flush() leaves the
+    asyncpg connection in a state that breaks the request-scoped session
+    dependency (greenlet error on the trailing commit).
     """
-    from sqlalchemy.exc import IntegrityError
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-    existing = await db.execute(
+    stmt = (
+        pg_insert(ScheduledWorkout)
+        .values(
+            workout_plan_id=plan_id,
+            workout_session_id=session_id,
+            scheduled_date=scheduled_date,
+            week_number=0,
+            is_completed=is_completed,
+        )
+        .on_conflict_do_nothing(
+            index_elements=["workout_session_id", "scheduled_date"]
+        )
+    )
+    await db.execute(stmt)
+
+    fetched = await db.execute(
         select(ScheduledWorkout).where(
             ScheduledWorkout.workout_session_id == session_id,
             ScheduledWorkout.scheduled_date == scheduled_date,
         )
     )
-    sw = existing.scalar_one_or_none()
-    if sw is not None:
-        return sw
-
-    sw = ScheduledWorkout(
-        workout_plan_id=plan_id,
-        workout_session_id=session_id,
-        scheduled_date=scheduled_date,
-        week_number=0,
-        is_completed=is_completed,
-    )
-    db.add(sw)
-    try:
-        await db.flush()
-    except IntegrityError:
-        await db.rollback()
-        re_fetch = await db.execute(
-            select(ScheduledWorkout).where(
-                ScheduledWorkout.workout_session_id == session_id,
-                ScheduledWorkout.scheduled_date == scheduled_date,
-            )
-        )
-        sw = re_fetch.scalar_one()
-    return sw
+    return fetched.scalar_one()
 
 
 def _training_weekdays(days_per_week: int) -> list[int]:
