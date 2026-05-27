@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
 import json
 import logging
 
 import app.db.base  # noqa: F401 — ensure all models are registered for relationships
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_async_session
 from app.dependencies import get_current_user
 from app.models.agent import AgentToolCall
@@ -53,6 +54,8 @@ async def create_conversation(
 
 @router.get("/conversations", response_model=list[ConversationListRead])
 async def list_conversations(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
@@ -60,6 +63,8 @@ async def list_conversations(
         select(ChatConversation)
         .where(ChatConversation.user_id == user.id)
         .order_by(ChatConversation.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     return [
         ConversationListRead(
@@ -74,7 +79,7 @@ async def list_conversations(
 
 @router.get("/conversations/{conv_id}", response_model=ConversationRead)
 async def get_conversation(
-    conv_id: str,
+    conv_id: UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
@@ -150,7 +155,7 @@ async def get_conversation(
 
 @router.delete("/conversations/{conv_id}")
 async def delete_conversation(
-    conv_id: str,
+    conv_id: UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
@@ -168,7 +173,7 @@ async def delete_conversation(
 
 @router.post("/conversations/{conv_id}/messages")
 async def send_message(
-    conv_id: str,
+    conv_id: UUID,
     data: ChatMessageCreate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
@@ -181,6 +186,8 @@ async def send_message(
     conv = result.scalar_one_or_none()
     if not conv:
         raise NotFoundError("Conversation")
+    if not conv.is_active:
+        raise BadRequestError("Conversation is archived")
 
     should_generate_title = conv.title is None or conv.title.strip() == ""
     if should_generate_title:
@@ -213,9 +220,16 @@ async def send_message(
             try:
                 new_title = await generate_conversation_title(user_message_for_title)
                 if new_title:
+                    new_title = new_title[:200]
+                    # Only overwrite if the title is still the auto-fallback —
+                    # if the user renamed the conversation in another tab
+                    # mid-stream, leave their choice alone.
                     await db.execute(
                         update(ChatConversation)
-                        .where(ChatConversation.id == conv.id)
+                        .where(
+                            ChatConversation.id == conv.id,
+                            ChatConversation.title == fallback_title,
+                        )
                         .values(title=new_title)
                     )
                     await db.commit()
@@ -229,7 +243,7 @@ async def send_message(
 
 @router.post("/proposals/{proposal_id}/approve")
 async def approve_proposal(
-    proposal_id: str,
+    proposal_id: UUID,
     data: ToolProposalApprove,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
@@ -242,7 +256,7 @@ async def approve_proposal(
         try:
             async for event in resume_agent_after_approval(
                 user=user,
-                proposal_id=proposal_id,
+                proposal_id=str(proposal_id),
                 approved=data.approved,
                 db=db,
             ):

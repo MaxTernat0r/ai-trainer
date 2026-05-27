@@ -118,11 +118,13 @@ async def _find_or_create_food_item(
     food_name_ru = food_data.get("food_name", "Unknown food")
     food_name_en = food_data.get("food_name_en", food_name_ru)
 
-    # Try to find an existing food item by Russian name (case-insensitive)
+    # Try to find an existing food item by Russian name (case-insensitive).
+    # Use .first() rather than .scalar_one_or_none() because seed data may
+    # contain duplicate name_ru values; we just want any matching record.
     result = await db.execute(
-        select(FoodItem).where(FoodItem.name_ru.ilike(food_name_ru))
+        select(FoodItem).where(FoodItem.name_ru.ilike(food_name_ru)).limit(1)
     )
-    existing = result.scalar_one_or_none()
+    existing = result.scalars().first()
 
     if existing:
         return existing
@@ -199,7 +201,11 @@ def _pick_food(catalog: list[dict], keywords: list[str], profile: UserProfile) -
 
     if allowed:
         return allowed[0]
-    return catalog[0]
+    # Refuse to silently fall back to a possibly-allergenic catalog entry.
+    raise AIServiceError(
+        "No foods in the catalog are compatible with the user's "
+        "allergies/disliked-foods list — cannot generate fallback plan."
+    )
 
 
 def _meal_item(food: dict, quantity_g: int, notes: str | None = None) -> dict:
@@ -208,6 +214,22 @@ def _meal_item(food: dict, quantity_g: int, notes: str | None = None) -> dict:
         "quantity_g": quantity_g,
         "notes": notes,
     }
+
+
+def _clamp_quantity_g(value) -> float:
+    """Coerce AI-returned quantity to a sensible per-item gram amount.
+
+    The model occasionally returns negative numbers, strings, or absurd
+    values like 1e6. Default 100 g for missing/invalid; cap at 5 kg/item
+    so a single misparsed entry can't blow up the macro totals.
+    """
+    try:
+        qty = float(value) if value is not None else 100.0
+    except (TypeError, ValueError):
+        return 100.0
+    if qty <= 0:
+        return 100.0
+    return min(qty, 5000.0)
 
 
 def _build_fallback_nutrition_plan_data(
@@ -380,7 +402,17 @@ async def generate_nutrition_plan(
         if "meals" not in plan_data or not plan_data["meals"]:
             raise AIServiceError("AI generated an empty nutrition plan with no meals")
 
-        # Deactivate existing plans
+        # Deactivate existing plans. Take a per-user advisory lock so that two
+        # concurrent /generate calls don't overwrite each other and leave us
+        # with several rows the API claims are active. The key has to be
+        # deterministic across uvicorn workers — Python's `hash()` is salted
+        # per-process and would silently disable the lock under load.
+        from sqlalchemy import text
+
+        from app.core.locks import advisory_key
+
+        lock_key = advisory_key("nutrition_plan", str(user.id))
+        await db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": lock_key})
         await db.execute(
             update(NutritionPlan)
             .where(NutritionPlan.user_id == user.id)
@@ -415,13 +447,26 @@ async def generate_nutrition_plan(
 
             items_data = meal_data.get("items", [])
             for item_data in items_data:
+                # Defence-in-depth: Claude is told about allergies in the
+                # system prompt, but prompt-only enforcement is unreliable.
+                # Drop any item the model returned that conflicts with the
+                # user's allergies/disliked foods.
+                if not _is_allowed_food(item_data, profile):
+                    logger.warning(
+                        "AI returned allergen-conflicting item, dropped: %s",
+                        item_data.get("food_name"),
+                    )
+                    continue
+
                 # Find or create the food item
                 food_item = await _find_or_create_food_item(item_data, db)
+
+                quantity_g = _clamp_quantity_g(item_data.get("quantity_g"))
 
                 meal_item = MealItem(
                     meal_id=meal.id,
                     food_item_id=food_item.id,
-                    quantity_g=item_data.get("quantity_g", 100),
+                    quantity_g=quantity_g,
                     notes=item_data.get("notes"),
                 )
                 db.add(meal_item)

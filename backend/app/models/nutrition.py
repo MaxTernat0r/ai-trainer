@@ -41,7 +41,11 @@ class NutritionPlan(BaseModel):
 
     user: Mapped["User"] = relationship(back_populates="nutrition_plans")  # type: ignore[name-defined]  # noqa: F821
     meals: Mapped[list["Meal"]] = relationship(
-        back_populates="nutrition_plan", lazy="selectin", order_by="Meal.order_index"
+        back_populates="nutrition_plan",
+        lazy="selectin",
+        order_by="Meal.order_index",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
 
@@ -56,7 +60,12 @@ class Meal(BaseModel):
     target_calories: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     nutrition_plan: Mapped["NutritionPlan"] = relationship(back_populates="meals")
-    items: Mapped[list["MealItem"]] = relationship(back_populates="meal", lazy="selectin")
+    items: Mapped[list["MealItem"]] = relationship(
+        back_populates="meal",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class MealItem(BaseModel):

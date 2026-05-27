@@ -107,7 +107,12 @@ async def _load_conversation_history(
     messages = list(reversed(messages))
 
     return [
-        {"role": msg.role, "content": msg.content}
+        # Defence-in-depth: refuse anything that isn't a chat-shaped role.
+        # The writer constrains role today, but a future buggy migration or
+        # a row written by a tool path with role="system"/"tool" must not
+        # be replayed as upstream system instructions.
+        {"role": (msg.role if msg.role in {"user", "assistant"} else "user"),
+         "content": msg.content}
         for msg in messages
     ]
 
@@ -152,12 +157,24 @@ async def generate_chat_response(
             yield _build_fallback_chat_response(message)
             return
 
-        async for content in stream_chat_completion(
+        stream = stream_chat_completion(
             messages=messages,
             temperature=0.7,
             max_tokens=1024,
-        ):
-            yield content
+        )
+        try:
+            async for content in stream:
+                yield content
+        finally:
+            # Make cancellation deterministic — if the SSE client disconnects
+            # mid-response, close the upstream HTTP stream right away instead
+            # of relying on GC to eventually release the socket.
+            aclose = getattr(stream, "aclose", None)
+            if aclose is not None:
+                try:
+                    await aclose()
+                except Exception:  # noqa: BLE001
+                    pass
 
     except AIServiceError:
         raise

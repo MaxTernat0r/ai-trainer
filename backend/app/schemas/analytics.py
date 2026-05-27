@@ -1,11 +1,32 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+
+from app.core.validators import (
+    MEASUREMENT_CM_MAX,
+    MEASUREMENT_CM_MIN,
+    MeasurementType,
+    WEIGHT_KG_MAX,
+    WEIGHT_KG_MIN,
+)
 
 
 class WeightLogCreate(BaseModel):
-    weight_kg: float
+    weight_kg: float = Field(ge=WEIGHT_KG_MIN, le=WEIGHT_KG_MAX)
     logged_at: str | None = None
+
+    @field_validator("logged_at")
+    @classmethod
+    def _not_future(cls, v: str | None) -> str | None:
+        if not v:
+            return v
+        try:
+            parsed = datetime.fromisoformat(v.replace("Z", "+00:00")).date()
+        except (ValueError, AttributeError) as exc:
+            raise ValueError("logged_at must be ISO date") from exc
+        if parsed > date.today():
+            raise ValueError("logged_at cannot be in the future")
+        return v
 
 
 class WeightLogRead(BaseModel):
@@ -17,9 +38,22 @@ class WeightLogRead(BaseModel):
 
 
 class MeasurementCreate(BaseModel):
-    measurement_type: str
-    value_cm: float
+    measurement_type: MeasurementType
+    value_cm: float = Field(ge=MEASUREMENT_CM_MIN, le=MEASUREMENT_CM_MAX)
     logged_at: str | None = None
+
+    @field_validator("logged_at")
+    @classmethod
+    def _not_future(cls, v: str | None) -> str | None:
+        if not v:
+            return v
+        try:
+            parsed = datetime.fromisoformat(v.replace("Z", "+00:00")).date()
+        except (ValueError, AttributeError) as exc:
+            raise ValueError("logged_at must be ISO date") from exc
+        if parsed > date.today():
+            raise ValueError("logged_at cannot be in the future")
+        return v
 
 
 class MeasurementRead(BaseModel):

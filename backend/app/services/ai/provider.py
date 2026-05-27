@@ -249,6 +249,11 @@ async def stream_anthropic_agent_turn(
 
     Caller is expected to assemble text deltas, watch for tool_use blocks,
     and emit higher-level protocol events.
+
+    Retries each available API key once on transient failure (HTTP 5xx,
+    timeout, connection error). Logs the underlying status/exception on
+    every attempt — silent failure was observed in production where the
+    last-key error fell through without any context.
     """
     payload: dict[str, Any] = {
         "model": settings.ANTHROPIC_MODEL,
@@ -266,6 +271,9 @@ async def stream_anthropic_agent_turn(
         raise AIServiceError("Anthropic API key is not configured")
 
     last_error: Exception | None = None
+    last_status: int | None = None
+    last_body: str | None = None
+
     for index, api_key in enumerate(keys):
         try:
             async with httpx.AsyncClient(timeout=settings.ANTHROPIC_TIMEOUT_SECONDS) as client:
@@ -275,7 +283,20 @@ async def stream_anthropic_agent_turn(
                     headers=_anthropic_headers(api_key),
                     json=payload,
                 ) as response:
-                    response.raise_for_status()
+                    if response.status_code >= 400:
+                        body_bytes = await response.aread()
+                        last_status = response.status_code
+                        last_body = body_bytes.decode("utf-8", errors="replace")[:1000]
+                        logger.warning(
+                            "Anthropic agent stream key #%s returned %s: %s",
+                            index + 1,
+                            last_status,
+                            last_body,
+                        )
+                        last_error = AIServiceError(
+                            f"Anthropic returned {last_status}"
+                        )
+                        continue
                     async for line in response.aiter_lines():
                         if not line.startswith("data: "):
                             continue
@@ -288,15 +309,49 @@ async def stream_anthropic_agent_turn(
                             continue
                         yield event
                         if event.get("type") == "error":
-                            raise AIServiceError("Anthropic stream returned an error")
+                            err_payload = event.get("error", {})
+                            logger.warning(
+                                "Anthropic agent stream key #%s emitted error: %s",
+                                index + 1,
+                                err_payload,
+                            )
+                            raise AIServiceError(
+                                f"Anthropic stream error: {err_payload.get('type', 'unknown')}"
+                            )
             return
-        except (httpx.HTTPError, ValueError, AIServiceError) as exc:
+        except AIServiceError as exc:
             last_error = exc
-            if index < len(keys) - 1:
-                logger.warning("Anthropic agent stream failed with key #%s; trying next key", index + 1)
-                continue
+            logger.warning(
+                "Anthropic agent stream key #%s aborted: %s",
+                index + 1,
+                exc,
+            )
+            continue
+        except httpx.HTTPError as exc:
+            last_error = exc
+            logger.warning(
+                "Anthropic agent stream key #%s transport error: %s: %s",
+                index + 1,
+                type(exc).__name__,
+                exc,
+            )
+            continue
+        except ValueError as exc:
+            last_error = exc
+            logger.warning(
+                "Anthropic agent stream key #%s parse error: %s",
+                index + 1,
+                exc,
+            )
+            continue
 
-    raise AIServiceError("Anthropic agent stream failed") from last_error
+    detail = (
+        f"Anthropic agent stream failed: {last_status} {last_body}"
+        if last_status is not None
+        else f"Anthropic agent stream failed: {type(last_error).__name__ if last_error else 'unknown'}"
+    )
+    logger.error(detail)
+    raise AIServiceError(detail) from last_error
 
 
 async def _post_anthropic(payload: dict[str, Any]) -> dict[str, Any]:

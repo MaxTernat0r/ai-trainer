@@ -29,10 +29,17 @@ async def get_current_user(
         user_id = payload.get("sub")
         if user_id is None:
             raise credentials_exception
+        try:
+            user_uuid = uuid.UUID(str(user_id))
+        except (ValueError, TypeError):
+            # Tokens with malformed `sub` (non-UUID, e.g. truncated or from
+            # a different schema) used to bubble up as a 500. Surface a
+            # plain 401 instead so we don't leak stack traces to clients.
+            raise credentials_exception
     except JWTError:
         raise credentials_exception
 
-    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    result = await db.execute(select(User).where(User.id == user_uuid))
     user = result.scalar_one_or_none()
 
     if user is None or not user.is_active:

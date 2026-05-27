@@ -31,6 +31,11 @@ class BadRequestError(AppException):
         super().__init__(400, detail, "BAD_REQUEST")
 
 
+class ConflictError(AppException):
+    def __init__(self, detail: str = "Resource conflict") -> None:
+        super().__init__(409, detail, "CONFLICT")
+
+
 class UnauthorizedError(AppException):
     def __init__(self, detail: str = "Not authenticated") -> None:
         super().__init__(401, detail, "UNAUTHORIZED")

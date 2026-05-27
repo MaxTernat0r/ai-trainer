@@ -21,8 +21,10 @@ Events emitted to the caller (consumed by chat router for SSE):
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import random
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
@@ -48,17 +50,61 @@ MAX_ITERATIONS = 5
 MAX_HISTORY_MESSAGES = 20
 DEFAULT_MAX_TOKENS = 2048
 DEFAULT_TEMPERATURE = 0.4
+STREAM_RETRY_ATTEMPTS = 2
+STREAM_RETRY_BASE_DELAY = 0.6
+# Anthropic happily echoes large tool inputs/outputs (food-photo base64,
+# 200-item list_exercises payloads). Stored verbatim in pending_messages
+# JSONB they balloon row sizes and slow every conversation read. Cap each
+# tool_result content so the persisted resume blob stays bounded.
+MAX_PERSISTED_TOOL_RESULT_CHARS = 8 * 1024
 
 AGENT_SYSTEM_PROMPT = """\
 Ты — Coach AI: персональный ИИ-тренер с опытом 10 лет работы. Воспитал \
 олимпийских спортсменов и помог сотням людей наладить тренировки и питание. \
 Отыгрывай роль человека-тренера, отвечай тёплым живым русским языком.
 
-ВАЖНО: ты управляешь приложением через инструменты (tools). У тебя есть \
-полный доступ к данным пользователя и его планам. Когда пользователь \
-просит что-то сделать с его данными — НЕ отвечай только текстом, а \
-вызывай нужный tool. Когда тебе нужно посмотреть данные перед советом — \
-вызывай read-only tool, не выдумывай числа.
+КАК ТЫ РАБОТАЕШЬ: ты управляешь приложением через инструменты (tools). \
+У тебя есть полный доступ к данным пользователя и его планам. Любое \
+действие с данными пользователя ты выполняешь ТОЛЬКО через tool — никогда \
+не описывай словами то, что должен сделать инструмент.
+
+🔴 КРИТИЧНОЕ ПРАВИЛО — НИКАКИХ ВЫМЫШЛЕННЫХ ДЕЙСТВИЙ:
+ЗАПРЕЩЕНО писать "записал", "добавил", "сохранил", "удалил", "обновил", \
+"внёс", "зафиксировал", "поставил", "запланировал", "✅", "готово" — \
+если ты НЕ вызвал соответствующий write-tool в этом же ходе. Текст \
+без tool_use = ничего не произошло, БД пустая, пользователь обманут. \
+Это худшая ошибка, которую ты можешь совершить.
+
+Если намерение пользователя — записать/удалить/изменить данные, ты \
+ОБЯЗАН вызвать tool. Подтверждение даст пользователь кликом. До клика \
+никаких "записал" — только нейтральное "сейчас оформлю запись" или \
+сразу tool без вступления.
+
+ПРИМЕРЫ ТРИГГЕРОВ К ВЫЗОВУ TOOL (не текстовому ответу):
+• "запиши/добавь/залогируй … граммы/еду/блюдо" → log_food
+• "запиши вес … кг" → log_weight (ТОЛЬКО общий вес тела, в кг)
+• "запиши обхват/замер/окружность талии/груди/бедер/руки/шеи/ноги … см" → \
+  log_measurement (НЕ log_weight! Это measurement_type + value_cm)
+• "удали последнюю запись/тренировку/план" → delete_*
+• "обнови мой вес/рост/цель в профиле" → update_profile
+• "сгенерируй/составь план тренировок|питания" → generate_*_plan
+• "запланируй на дату X" → schedule_workout_plan / reschedule_workout_entry
+• "отметь тренировку выполненной" → toggle_workout_complete
+• "добавь / убери ограничение по здоровью" → add_/remove_medical_restriction
+• "залогируй подход … кг × … повторов" → log_exercise_set
+
+🔴 ВЕС vs ОБХВАТ — РАЗНЫЕ TOOLS:
+- log_weight: только общий вес тела в килограммах ("я вешу 81 кг", "запиши \
+  вес 75").
+- log_measurement: окружности частей тела в сантиметрах (талия, грудь, \
+  бедра, плечо, шея, бицепс, икра). Аргументы: measurement_type + value_cm.
+- НИКОГДА не подставляй цифры из истории чата (например, прошлый вес) в \
+  новые tool-вызовы. Бери только то, что пользователь сказал в текущем \
+  сообщении.
+
+Если для tool'а не хватает данных (например, не знаешь units, food_item_id, \
+дату) — сначала вызови read-only tool (get_profile, list_*) или коротко \
+переспроси. Не выдумывай значения.
 
 ПРАВИЛА БЕЗОПАСНОСТИ И ЗДРАВОГО СМЫСЛА (важнее всех остальных):
 1. Если пользователь сообщает нереалистичные данные о теле \
@@ -87,12 +133,34 @@ add_*, remove_*, reschedule_*, toggle_*) требуют подтверждени
 после клика. Тебе об этом сообщат отдельным сообщением.
 
 СТИЛЬ ОБЩЕНИЯ:
-- Не пиши "сейчас вызову tool" или "выполняю функцию" — просто делай.
-- После вызова read-only tool коротко сообщай выводы пользователю.
-- После вызова write tool кратко поясни, что предлагаешь сделать и почему — \
-пользователь увидит карточку подтверждения и твой текст рядом с ней.
+- Не пиши "сейчас вызову tool" или "выполняю функцию" — просто вызывай.
+- Перед write-tool можно кратко (1 предложение) пояснить, что предлагаешь \
+и почему — пользователь увидит карточку подтверждения и твой текст рядом.
+- После выполнения tool (когда придёт tool_result) — коротко резюмируй \
+факт по результату, без выдуманных цифр.
 - Будь конкретным: цифры, продукты, дни — не общие фразы.
 """
+
+
+def _humanize_ai_error(message: str) -> str:
+    """Map raw provider errors to a friendly Russian message.
+
+    Anthropic / OpenAI errors carry JSON bodies and status codes that are
+    useless to end users and can leak request shape. We surface a short
+    user-facing line and keep the detail in logs.
+    """
+    text = (message or "").lower()
+    if "429" in text or "rate" in text or "overloaded" in text:
+        return "Сервис ИИ перегружен, попробуй ещё раз через минуту."
+    if "timeout" in text or "timed out" in text:
+        return "ИИ не успел ответить, попробуй ещё раз."
+    if "401" in text or "403" in text or "unauthorized" in text or "api key" in text:
+        return "Сервис ИИ временно недоступен."
+    if "5" in text and ("500" in text or "502" in text or "503" in text or "504" in text):
+        return "Сервис ИИ временно недоступен, попробуй ещё раз."
+    if "not configured" in text:
+        return "ИИ-провайдер не настроен. Сообщи администратору."
+    return "Не удалось получить ответ от ИИ. Попробуй ещё раз."
 
 
 async def _load_conversation_history(
@@ -147,62 +215,88 @@ async def _stream_assistant_turn(
     Yields text chunks via on_text_chunk(content_str) for incremental UI
     updates. Returns the final assistant message in Anthropic message format
     {"role": "assistant", "content": [...blocks]} and the stop_reason.
+
+    Retries the whole turn on transient stream failures with exponential
+    backoff + jitter. Without this, Anthropic 5xx / connection drops surface
+    as "Anthropic agent stream failed" mid-conversation and the user has to
+    retype.
     """
-    blocks: list[dict[str, Any]] = []
-    current_block: dict[str, Any] | None = None
-    current_json_buffer = ""
-    stop_reason: str | None = None
-
-    async for event in stream_anthropic_agent_turn(
-        system=system,
-        messages=messages,
-        tools=tools,
-        max_tokens=DEFAULT_MAX_TOKENS,
-        temperature=DEFAULT_TEMPERATURE,
-    ):
-        ev_type = event.get("type")
-        if ev_type == "content_block_start":
-            block = event.get("content_block", {}) or {}
-            current_block = {"type": block.get("type"), **{k: v for k, v in block.items() if k != "type"}}
-            current_json_buffer = ""
-            if current_block.get("type") == "text":
-                current_block.setdefault("text", "")
-            elif current_block.get("type") == "tool_use":
-                current_block["input"] = {}
-        elif ev_type == "content_block_delta":
-            delta = event.get("delta", {}) or {}
-            if not current_block:
-                continue
-            if delta.get("type") == "text_delta":
-                chunk = delta.get("text", "")
-                if chunk:
-                    current_block["text"] = current_block.get("text", "") + chunk
-                    if on_text_chunk:
-                        await on_text_chunk(chunk)
-            elif delta.get("type") == "input_json_delta":
-                current_json_buffer += delta.get("partial_json", "")
-        elif ev_type == "content_block_stop":
-            if current_block:
-                if current_block.get("type") == "tool_use":
-                    if current_json_buffer:
-                        try:
-                            current_block["input"] = json.loads(current_json_buffer)
-                        except json.JSONDecodeError:
-                            current_block["input"] = {}
+    last_error: Exception | None = None
+    for attempt in range(STREAM_RETRY_ATTEMPTS + 1):
+        blocks: list[dict[str, Any]] = []
+        current_block: dict[str, Any] | None = None
+        current_json_buffer = ""
+        stop_reason: str | None = None
+        try:
+            async for event in stream_anthropic_agent_turn(
+                system=system,
+                messages=messages,
+                tools=tools,
+                max_tokens=DEFAULT_MAX_TOKENS,
+                temperature=DEFAULT_TEMPERATURE,
+            ):
+                ev_type = event.get("type")
+                if ev_type == "content_block_start":
+                    block = event.get("content_block", {}) or {}
+                    current_block = {"type": block.get("type"), **{k: v for k, v in block.items() if k != "type"}}
                     current_json_buffer = ""
-                blocks.append(current_block)
-                current_block = None
-        elif ev_type == "message_delta":
-            delta = event.get("delta", {}) or {}
-            if delta.get("stop_reason"):
-                stop_reason = delta["stop_reason"]
-        elif ev_type == "message_stop":
-            pass
+                    if current_block.get("type") == "text":
+                        current_block.setdefault("text", "")
+                    elif current_block.get("type") == "tool_use":
+                        current_block["input"] = {}
+                elif ev_type == "content_block_delta":
+                    delta = event.get("delta", {}) or {}
+                    if not current_block:
+                        continue
+                    if delta.get("type") == "text_delta":
+                        chunk = delta.get("text", "")
+                        if chunk:
+                            current_block["text"] = current_block.get("text", "") + chunk
+                            if on_text_chunk:
+                                await on_text_chunk(chunk)
+                    elif delta.get("type") == "input_json_delta":
+                        current_json_buffer += delta.get("partial_json", "")
+                elif ev_type == "content_block_stop":
+                    if current_block:
+                        if current_block.get("type") == "tool_use":
+                            if current_json_buffer:
+                                try:
+                                    current_block["input"] = json.loads(current_json_buffer)
+                                except json.JSONDecodeError:
+                                    current_block["input"] = {}
+                            current_json_buffer = ""
+                        blocks.append(current_block)
+                        current_block = None
+                elif ev_type == "message_delta":
+                    delta = event.get("delta", {}) or {}
+                    if delta.get("stop_reason"):
+                        stop_reason = delta["stop_reason"]
+                elif ev_type == "message_stop":
+                    pass
 
-    return {
-        "message": {"role": "assistant", "content": blocks},
-        "stop_reason": stop_reason,
-    }
+            return {
+                "message": {"role": "assistant", "content": blocks},
+                "stop_reason": stop_reason,
+            }
+        except AIServiceError as exc:
+            last_error = exc
+            if attempt >= STREAM_RETRY_ATTEMPTS:
+                logger.error(
+                    "Anthropic agent stream giving up after %s attempts: %s",
+                    attempt + 1,
+                    exc,
+                )
+                raise
+            delay = STREAM_RETRY_BASE_DELAY * (2 ** attempt) + random.uniform(0, 0.4)
+            logger.warning(
+                "Anthropic agent stream attempt %s failed (%s); retrying in %.1fs",
+                attempt + 1,
+                exc,
+                delay,
+            )
+            await asyncio.sleep(delay)
+    # Unreachable: loop either returns or raises.
+    raise AIServiceError("Anthropic agent stream failed") from last_error
 
 
 def _serialize_tool_result(result: Any) -> str:
@@ -214,6 +308,51 @@ def _serialize_tool_result(result: Any) -> str:
         return json.dumps(result, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
         return str(result)
+
+
+def _truncate_messages_for_storage(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return a copy of `messages` with oversized tool_result content
+    truncated. The Anthropic API still gets the full content during the
+    live turn; we only shrink what we persist into pending_messages JSONB."""
+    cap = MAX_PERSISTED_TOOL_RESULT_CHARS
+    out: list[dict[str, Any]] = []
+    for msg in messages:
+        content = msg.get("content")
+        if isinstance(content, list):
+            new_blocks: list[dict[str, Any]] = []
+            for block in content:
+                if (
+                    isinstance(block, dict)
+                    and block.get("type") == "tool_result"
+                    and isinstance(block.get("content"), str)
+                    and len(block["content"]) > cap
+                ):
+                    truncated = (
+                        block["content"][:cap]
+                        + f"\n…[truncated, {len(block['content']) - cap} chars]"
+                    )
+                    new_blocks.append({**block, "content": truncated})
+                else:
+                    new_blocks.append(block)
+            out.append({**msg, "content": new_blocks})
+        else:
+            out.append(msg)
+    return out
+
+
+def _normalize_history_for_anthropic(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Anthropic's messages API rejects a turn whose first message has
+    role=='assistant'. After trimming to MAX_HISTORY_MESSAGES the window
+    can start mid-thread on an assistant reply — drop those leading
+    entries so the user message we just persisted always heads the list."""
+    out = list(messages)
+    while out and out[0].get("role") != "user":
+        out.pop(0)
+    return out
 
 
 async def run_agent_turn(
@@ -236,14 +375,17 @@ async def run_agent_turn(
         yield {"type": "error", "message": "AI provider is not configured"}
         return
 
-    # Persist the user message before we hit the model
+    # Persist the user message before we hit the model. Commit immediately
+    # so a transient AI failure (5xx on the very first stream attempt) can't
+    # roll back the just-typed user message and leave the chat looking like
+    # nothing was sent.
     user_msg_row = ChatMessage(
         conversation_id=conversation.id,
         role="user",
         content=user_message,
     )
     db.add(user_msg_row)
-    await db.flush()
+    await db.commit()
 
     system_prompt = await _build_system_prompt(user, db)
     history = await _load_conversation_history(conversation, db)
@@ -257,7 +399,7 @@ async def run_agent_turn(
         summarize_tool_result,
     )
 
-    messages: list[dict[str, Any]] = list(history)
+    messages: list[dict[str, Any]] = _normalize_history_for_anthropic(history)
     final_text_buffer: list[str] = []
 
     try:
@@ -288,9 +430,6 @@ async def run_agent_turn(
                 # Done — model produced final text
                 break
 
-            # We must include the assistant message in our running messages
-            messages.append(assistant_message)
-
             # Group tool_uses: if any is a write tool, we stop and emit a proposal
             # for the FIRST tool_use; remaining ones are dropped (Claude will reissue)
             write_tool_use = next(
@@ -302,6 +441,21 @@ async def run_agent_turn(
                 tool_id = write_tool_use["id"]
                 arguments = write_tool_use.get("input", {})
 
+                # Anthropic requires a tool_result for *every* tool_use in
+                # an assistant message on the next call. Strip non-write
+                # siblings out of the persisted message so the resume turn
+                # doesn't 400. Claude will reissue the read tools after the
+                # write is approved if it still needs them.
+                pruned_blocks = [
+                    block for block in blocks
+                    if block.get("type") != "tool_use" or block is write_tool_use
+                ]
+                pruned_assistant_message = {
+                    "role": "assistant",
+                    "content": pruned_blocks,
+                }
+                messages.append(pruned_assistant_message)
+
                 proposal_row = AgentToolCall(
                     user_id=user.id,
                     conversation_id=conversation.id,
@@ -312,7 +466,7 @@ async def run_agent_turn(
                     },
                     is_proposal=True,
                     is_approved=None,
-                    pending_messages=messages,
+                    pending_messages=_truncate_messages_for_storage(messages),
                 )
                 db.add(proposal_row)
                 await db.flush()
@@ -339,7 +493,10 @@ async def run_agent_turn(
                 await db.commit()
                 return
 
-            # All tool_uses are read-only — execute and feed back
+            # All tool_uses are read-only — execute and feed back. Append the
+            # full assistant message verbatim so every tool_use has a matching
+            # tool_result on the next call.
+            messages.append(assistant_message)
             tool_results_block: list[dict[str, Any]] = []
             for tu in tool_uses:
                 tool_name = tu["name"]
@@ -415,6 +572,7 @@ async def run_agent_turn(
                     })
 
             await db.flush()
+            await db.commit()  # persist tool_results before next Anthropic call
             messages.append({"role": "user", "content": tool_results_block})
             # Continue loop — feed results back to Claude
 
@@ -431,12 +589,32 @@ async def run_agent_turn(
         await db.commit()
 
     except AIServiceError as exc:
-        await db.rollback()
-        yield {"type": "error", "message": str(exc)}
+        # Tool side effects already committed above. Only the in-flight
+        # Anthropic call failed — surface to UI without rollback so prior
+        # tool_results survive in chat history.
+        logger.warning("Agent turn aborted by AI provider: %s", exc)
+        accumulated_text = "".join(final_text_buffer).strip()
+        if accumulated_text:
+            try:
+                db.add(
+                    ChatMessage(
+                        conversation_id=conversation.id,
+                        role="assistant",
+                        content=accumulated_text,
+                    )
+                )
+                await db.commit()
+            except Exception:  # noqa: BLE001
+                await db.rollback()
+        yield {
+            "type": "error",
+            "message": _humanize_ai_error(str(exc)),
+            "retryable": True,
+        }
     except Exception:
         logger.exception("Agent turn failed")
         await db.rollback()
-        yield {"type": "error", "message": "AI agent failed unexpectedly"}
+        yield {"type": "error", "message": "ИИ-агент столкнулся с ошибкой. Попробуй ещё раз."}
 
 
 async def resume_agent_after_approval(
@@ -637,13 +815,23 @@ async def resume_agent_after_approval(
             # If Claude tries another write tool, we surface a new proposal.
             from app.services.ai.agent_tools import execute_read_tool
 
-            pending_messages.append(assistant_message)
-
             write_tu = next(
                 (tu for tu in tool_uses if is_write_tool(tu.get("name", ""))),
                 None,
             )
             if write_tu:
+                # Strip sibling tool_uses so the persisted resume blob has a
+                # tool_result per remaining tool_use — otherwise Anthropic
+                # rejects the next call.
+                pruned_blocks = [
+                    block for block in blocks
+                    if block.get("type") != "tool_use" or block is write_tu
+                ]
+                pending_messages.append({
+                    "role": "assistant",
+                    "content": pruned_blocks,
+                })
+
                 new_proposal = AgentToolCall(
                     user_id=user.id,
                     conversation_id=conversation.id,
@@ -654,7 +842,7 @@ async def resume_agent_after_approval(
                     },
                     is_proposal=True,
                     is_approved=None,
-                    pending_messages=pending_messages,
+                    pending_messages=_truncate_messages_for_storage(pending_messages),
                 )
                 db.add(new_proposal)
                 await db.flush()
@@ -675,7 +863,9 @@ async def resume_agent_after_approval(
                 await db.commit()
                 return
 
-            # Read-only tools — execute and continue
+            # Read-only tools — execute and continue. Full assistant message
+            # is appended verbatim so each tool_use lines up with a tool_result.
+            pending_messages.append(assistant_message)
             tool_results_block: list[dict[str, Any]] = []
             for tu in tool_uses:
                 tu_name = tu["name"]
@@ -744,6 +934,7 @@ async def resume_agent_after_approval(
                         "is_error": True,
                     })
             await db.flush()
+            await db.commit()  # persist tool_results before next Anthropic call
             pending_messages.append({"role": "user", "content": tool_results_block})
 
         accumulated = "".join(final_text_buffer).strip()
@@ -755,9 +946,24 @@ async def resume_agent_after_approval(
             ))
         await db.commit()
     except AIServiceError as exc:
-        await db.rollback()
-        yield {"type": "error", "message": str(exc)}
+        logger.warning("Resume agent turn aborted by AI provider: %s", exc)
+        accumulated = "".join(final_text_buffer).strip()
+        if accumulated:
+            try:
+                db.add(ChatMessage(
+                    conversation_id=conversation.id,
+                    role="assistant",
+                    content=accumulated,
+                ))
+                await db.commit()
+            except Exception:  # noqa: BLE001
+                await db.rollback()
+        yield {
+            "type": "error",
+            "message": _humanize_ai_error(str(exc)),
+            "retryable": True,
+        }
     except Exception:
         logger.exception("Resume agent turn failed")
         await db.rollback()
-        yield {"type": "error", "message": "AI agent failed unexpectedly"}
+        yield {"type": "error", "message": "ИИ-агент столкнулся с ошибкой. Попробуй ещё раз."}

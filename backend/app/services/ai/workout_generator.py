@@ -21,6 +21,26 @@ from app.services.ai.provider import generate_json_completion, get_configured_ai
 
 logger = logging.getLogger(__name__)
 
+
+def _clamp_int(value, default: int, lo: int, hi: int) -> int:
+    """Coerce AI-returned int into [lo, hi]; default when unparsable."""
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(v, hi))
+
+
+def _clamp_optional_int(value, lo: int, hi: int) -> int | None:
+    """Same as _clamp_int but None if AI omitted the field."""
+    if value is None:
+        return None
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        return None
+    return max(lo, min(v, hi))
+
 WORKOUT_SYSTEM_PROMPT = """\
 Ты являешься профессиональным фитнес-тренером со стажем работы в 10 лет. \
 Воспитал много и олимпийских спортсменов, и просто помог людям влюбиться в спорт и похудеть.
@@ -263,10 +283,12 @@ async def _save_workout_plan(
                 workout_session_id=session.id,
                 exercise_id=uuid.UUID(exercise_id),
                 order_index=ex_idx,
-                target_sets=ex_data.get("target_sets", 3),
-                target_reps=str(ex_data.get("target_reps", "8-12")),
-                target_rest_seconds=ex_data.get("target_rest_seconds"),
-                notes=ex_data.get("notes"),
+                target_sets=_clamp_int(ex_data.get("target_sets"), 3, 1, 12),
+                target_reps=str(ex_data.get("target_reps", "8-12"))[:20],
+                target_rest_seconds=_clamp_optional_int(
+                    ex_data.get("target_rest_seconds"), 0, 1800
+                ),
+                notes=(ex_data.get("notes") or None),
             )
             db.add(workout_exercise)
 

@@ -1,12 +1,15 @@
-from datetime import date
+from datetime import date, datetime, timedelta
+from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+
+from app.core.validators import MealType
 
 
 class GenerateNutritionRequest(BaseModel):
-    goal: str | None = None
-    daily_calories: int | None = None
-    meals_per_day: int = 4
+    goal: str | None = Field(None, max_length=64)
+    daily_calories: int | None = Field(None, ge=500, le=10000)
+    meals_per_day: int = Field(4, ge=1, le=10)
 
 
 class FoodItemRead(BaseModel):
@@ -70,18 +73,57 @@ class NutritionPlanListRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+def _validate_safe_url(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    if value.startswith("/"):
+        return value
+    lowered = value.lower()
+    if lowered.startswith(("http://", "https://")):
+        return value
+    raise ValueError("photo_url must be http(s) or a relative path starting with /")
+
+
+def _validate_logged_at(value: str | None) -> str | None:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+    except (ValueError, AttributeError) as exc:
+        raise ValueError("invalid date format (expected ISO-8601)") from exc
+    today = date.today()
+    if parsed > today + timedelta(days=1):
+        raise ValueError("logged_at cannot be in the future")
+    if parsed < today - timedelta(days=365 * 5):
+        raise ValueError("logged_at is too far in the past")
+    return parsed.isoformat()
+
+
 class NutritionLogCreate(BaseModel):
-    food_name: str
-    meal_type: str
-    quantity_g: float
-    calories: float
-    protein_g: float
-    fat_g: float
-    carbs_g: float
-    photo_url: str | None = None
-    notes: str | None = None
+    food_name: str = Field(..., min_length=1, max_length=200)
+    meal_type: MealType
+    quantity_g: float = Field(..., gt=0, le=10000)
+    calories: float = Field(..., ge=0, le=20000)
+    protein_g: float = Field(..., ge=0, le=2000)
+    fat_g: float = Field(..., ge=0, le=2000)
+    carbs_g: float = Field(..., ge=0, le=2000)
+    photo_url: str | None = Field(None, max_length=2000)
+    notes: str | None = Field(None, max_length=2000)
     logged_at: str | None = None
-    food_item_id: str | None = None
+    food_item_id: UUID | None = None
+
+    @field_validator("photo_url")
+    @classmethod
+    def _validate_photo_url(cls, v: str | None) -> str | None:
+        return _validate_safe_url(v)
+
+    @field_validator("logged_at")
+    @classmethod
+    def _validate_logged_at_field(cls, v: str | None) -> str | None:
+        return _validate_logged_at(v)
 
 
 class NutritionLogRead(BaseModel):

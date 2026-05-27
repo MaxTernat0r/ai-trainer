@@ -1,13 +1,16 @@
 from datetime import datetime, timedelta, timezone
 import logging
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Cookie, Depends, Request, Response
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import rate_limit
 from app.core.config import settings
 from app.core.exceptions import (
     BadRequestError,
+    ConflictError,
     EmailNotVerifiedError,
     EmailServiceError,
     UnauthorizedError,
@@ -41,6 +44,10 @@ from app.services.email import EmailDeliveryError, send_verification_email
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 VERIFICATION_RESEND_COOLDOWN_SECONDS = 60
+
+# Pre-computed dummy hash so failed-lookup login still spends bcrypt time and
+# attackers can't enumerate users by response latency.
+_DUMMY_PASSWORD_HASH = hash_password("dummy-password-for-timing-equalization")
 
 
 def _set_refresh_cookie(response: Response, raw_refresh: str) -> None:
@@ -143,11 +150,16 @@ async def _latest_active_verification_token(user: User, db: AsyncSession) -> Ema
 @router.post("/register", response_model=RegisterResponse)
 async def register(
     data: RegisterRequest,
+    request: Request,
     db: AsyncSession = Depends(get_async_session),
 ):
+    await rate_limit.enforce(
+        request, bucket="register", limit=5, window_seconds=600
+    )
+
     result = await db.execute(select(User).where(User.email == data.email))
     if result.scalar_one_or_none():
-        raise BadRequestError("Email already registered")
+        raise ConflictError("Email already registered")
 
     user = User(
         email=data.email,
@@ -155,7 +167,11 @@ async def register(
         is_verified=not settings.EMAIL_VERIFICATION_REQUIRED,
     )
     db.add(user)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        raise ConflictError("Email already registered")
 
     if not settings.EMAIL_VERIFICATION_REQUIRED:
         await db.commit()
@@ -178,13 +194,27 @@ async def register(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     data: LoginRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_async_session),
 ):
+    await rate_limit.enforce(
+        request,
+        bucket="login",
+        limit=10,
+        window_seconds=600,
+        extra=data.email,
+    )
+
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
 
-    if not user or not user.hashed_password or not verify_password(data.password, user.hashed_password):
+    # Equalize bcrypt time even when the account doesn't exist so the response
+    # time can't be used to enumerate registered emails.
+    candidate_hash = user.hashed_password if user and user.hashed_password else _DUMMY_PASSWORD_HASH
+    password_ok = verify_password(data.password, candidate_hash)
+
+    if not user or not user.hashed_password or not password_ok:
         raise UnauthorizedError("Invalid email or password")
 
     if not user.is_active:
@@ -199,9 +229,14 @@ async def login(
 @router.post("/verify-email", response_model=TokenResponse)
 async def verify_email(
     data: VerifyEmailRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_async_session),
 ):
+    await rate_limit.enforce(
+        request, bucket="verify-email", limit=20, window_seconds=600
+    )
+
     now = datetime.now(timezone.utc)
 
     if data.token:
@@ -213,6 +248,7 @@ async def verify_email(
                 EmailVerificationToken.used_at.is_(None),
                 EmailVerificationToken.expires_at > now,
             )
+            .with_for_update()
             .limit(1)
         )
         verification_token = result.scalar_one_or_none()
@@ -235,6 +271,7 @@ async def verify_email(
                 EmailVerificationToken.used_at.is_(None),
                 EmailVerificationToken.expires_at > now,
             )
+            .with_for_update()
             .limit(1)
         )
         verification_token = result.scalar_one_or_none()
@@ -265,8 +302,17 @@ async def verify_email(
 @router.post("/resend-verification", response_model=MessageResponse)
 async def resend_verification(
     data: ResendVerificationRequest,
+    request: Request,
     db: AsyncSession = Depends(get_async_session),
 ):
+    await rate_limit.enforce(
+        request,
+        bucket="resend-verification",
+        limit=5,
+        window_seconds=600,
+        extra=data.email,
+    )
+
     if not settings.EMAIL_VERIFICATION_REQUIRED:
         return MessageResponse(detail="Email verification is disabled")
 
@@ -292,16 +338,41 @@ async def refresh_token(
     db: AsyncSession = Depends(get_async_session),
 ):
     token_hash = hash_refresh_token(data.refresh_token)
+
+    # Lock the row for the duration of the rotation so two concurrent
+    # /refresh calls (e.g. two browser tabs) can't both observe is_revoked=False
+    # and both succeed. The loser blocks until the leader commits, then sees
+    # is_revoked=True and falls through to UnauthorizedError.
     result = await db.execute(
-        select(RefreshToken).where(
-            RefreshToken.token_hash == token_hash,
-            RefreshToken.is_revoked == False,  # noqa: E712
-            RefreshToken.expires_at > datetime.now(timezone.utc),
-        )
+        select(RefreshToken)
+        .where(RefreshToken.token_hash == token_hash)
+        .with_for_update()
     )
     existing = result.scalar_one_or_none()
 
     if not existing:
+        raise UnauthorizedError("Invalid or expired refresh token")
+
+    # Reuse-detection: a second hit on an already-rotated token usually means
+    # the cookie was stolen and replayed. Burn down all of the user's refresh
+    # tokens so the attacker (and the legitimate user) have to log in again.
+    if existing.is_revoked:
+        logger.warning(
+            "Refresh token reuse detected for user %s — revoking all tokens",
+            existing.user_id,
+        )
+        await db.execute(
+            update(RefreshToken)
+            .where(
+                RefreshToken.user_id == existing.user_id,
+                RefreshToken.is_revoked == False,  # noqa: E712
+            )
+            .values(is_revoked=True)
+        )
+        await db.commit()
+        raise UnauthorizedError("Invalid or expired refresh token")
+
+    if existing.expires_at <= datetime.now(timezone.utc):
         raise UnauthorizedError("Invalid or expired refresh token")
 
     # Revoke old token (rotation)
@@ -322,6 +393,25 @@ async def refresh_token(
 @router.post("/logout")
 async def logout(
     response: Response,
+    refresh_token: str | None = Cookie(default=None),
+    db: AsyncSession = Depends(get_async_session),
 ):
-    response.delete_cookie("refresh_token", path="/")
+    if refresh_token:
+        await db.execute(
+            update(RefreshToken)
+            .where(
+                RefreshToken.token_hash == hash_refresh_token(refresh_token),
+                RefreshToken.is_revoked == False,  # noqa: E712
+            )
+            .values(is_revoked=True)
+        )
+        await db.commit()
+
+    response.delete_cookie(
+        "refresh_token",
+        path="/",
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+    )
     return {"detail": "Logged out"}

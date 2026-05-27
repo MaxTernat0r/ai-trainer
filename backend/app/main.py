@@ -51,8 +51,12 @@ def create_app() -> FastAPI:
         allow_origins=_cors_origins(),
         allow_origin_regex=_local_dev_origin_regex(),
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        # Per CORS spec, "*" is invalid alongside credentials. Starlette
+        # papers over it by reflecting whatever the client requests, but the
+        # explicit lists make our policy auditable and rule out unintended
+        # methods/headers slipping through preflight.
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
     )
 
     app.add_exception_handler(AppException, app_exception_handler)

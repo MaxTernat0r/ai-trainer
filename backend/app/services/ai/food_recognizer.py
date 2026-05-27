@@ -8,12 +8,18 @@ FoodRecognitionResult schema.
 import base64
 import json
 import logging
+from io import BytesIO
 
-from app.core.exceptions import AIServiceError
+from PIL import Image, UnidentifiedImageError
+
+from app.core.exceptions import AIServiceError, BadRequestError
 from app.schemas.nutrition import FoodRecognitionResult, RecognizedFoodItem
 from app.services.ai.provider import generate_vision_json, get_configured_ai_provider
 
 logger = logging.getLogger(__name__)
+
+MAX_RECOGNIZE_BYTES = 6 * 1024 * 1024
+ALLOWED_RECOGNIZE_FORMATS = {"JPEG", "PNG", "WEBP"}
 
 FOOD_RECOGNITION_PROMPT = """\
 Проанализируй это изображение и определи, есть ли на нём еда.
@@ -83,65 +89,73 @@ async def recognize_food_from_photo(image_data: bytes) -> FoodRecognitionResult:
         FoodRecognitionResult with identified food items and nutritional info.
 
     Raises:
-        AIServiceError: If the API call fails or the response cannot be parsed.
+        BadRequestError: If the upload is not a valid image or exceeds the
+            size limit.
+        AIServiceError: If the vision provider is not configured or fails.
     """
-    if not get_configured_ai_provider():
-        logger.warning("AI provider is not configured; using fallback food recognition result")
-        return _build_fallback_food_recognition_result()
+    if not image_data:
+        raise BadRequestError("Empty image upload")
+    if len(image_data) > MAX_RECOGNIZE_BYTES:
+        raise BadRequestError(
+            f"Image too large (max {MAX_RECOGNIZE_BYTES // (1024 * 1024)} MB)"
+        )
 
     try:
-        # Base64-encode the image
-        image_base64 = base64.b64encode(image_data).decode("utf-8")
+        with Image.open(BytesIO(image_data)) as img:
+            img.verify()
+        with Image.open(BytesIO(image_data)) as img:
+            pil_format = (img.format or "").upper()
+    except Image.DecompressionBombError as exc:
+        raise BadRequestError("Image dimensions are too large") from exc
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise BadRequestError("Uploaded file is not a valid image") from exc
 
-        # Detect a reasonable MIME type from the image header bytes
-        mime_type = _detect_mime_type(image_data)
-
-        raw_content = await generate_vision_json(
-            FOOD_RECOGNITION_PROMPT,
-            image_base64,
-            mime_type,
-            max_tokens=1024,
-            temperature=0.3,
+    if pil_format not in ALLOWED_RECOGNIZE_FORMATS:
+        raise BadRequestError(
+            f"Unsupported image format: {pil_format or 'unknown'}"
         )
 
-        # Parse the JSON response
-        try:
-            result_data = json.loads(raw_content)
-        except json.JSONDecodeError as e:
-            logger.error("Failed to parse AI food recognition response: %s", e)
-            raise AIServiceError(
-                "Failed to parse AI response for food recognition"
-            )
+    if not get_configured_ai_provider():
+        raise AIServiceError("AI provider is not configured for vision")
 
-        # Build the result schema
-        items = [
-            RecognizedFoodItem(
-                food_name=item.get("food_name", "Unknown"),
-                confidence_score=min(1.0, max(0.0, item.get("confidence_score", 0.5))),
-                portion_grams=item.get("portion_grams", 100),
-                calories=item.get("calories", 0),
-                protein_g=item.get("protein_g", 0),
-                fat_g=item.get("fat_g", 0),
-                carbs_g=item.get("carbs_g", 0),
-            )
-            for item in result_data.get("items", [])
-        ]
+    image_base64 = base64.b64encode(image_data).decode("utf-8")
+    mime_type = _detect_mime_type(image_data)
 
-        return FoodRecognitionResult(
-            is_food=result_data.get("is_food", False),
-            items=items,
-            total_calories=result_data.get("total_calories", 0),
-            total_protein_g=result_data.get("total_protein_g", 0),
-            total_fat_g=result_data.get("total_fat_g", 0),
-            total_carbs_g=result_data.get("total_carbs_g", 0),
+    raw_content = await generate_vision_json(
+        FOOD_RECOGNITION_PROMPT,
+        image_base64,
+        mime_type,
+        max_tokens=1024,
+        temperature=0.3,
+    )
+
+    try:
+        result_data = json.loads(raw_content)
+    except json.JSONDecodeError as exc:
+        logger.error("Failed to parse AI food recognition response: %s", exc)
+        raise AIServiceError("Failed to parse AI response for food recognition") from exc
+
+    items = [
+        RecognizedFoodItem(
+            food_name=item.get("food_name", "Unknown"),
+            confidence_score=min(1.0, max(0.0, item.get("confidence_score", 0.5))),
+            portion_grams=item.get("portion_grams", 100),
+            calories=item.get("calories", 0),
+            protein_g=item.get("protein_g", 0),
+            fat_g=item.get("fat_g", 0),
+            carbs_g=item.get("carbs_g", 0),
         )
+        for item in result_data.get("items", [])
+    ]
 
-    except AIServiceError:
-        logger.warning("AI food recognition failed; using fallback food recognition result")
-        return _build_fallback_food_recognition_result()
-    except Exception as e:
-        logger.exception("Unexpected error during food recognition")
-        raise AIServiceError(f"Failed to recognize food from photo: {e}") from e
+    return FoodRecognitionResult(
+        is_food=result_data.get("is_food", False),
+        items=items,
+        total_calories=result_data.get("total_calories", 0),
+        total_protein_g=result_data.get("total_protein_g", 0),
+        total_fat_g=result_data.get("total_fat_g", 0),
+        total_carbs_g=result_data.get("total_carbs_g", 0),
+    )
 
 
 def _detect_mime_type(image_data: bytes) -> str:

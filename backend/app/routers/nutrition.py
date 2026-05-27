@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, UploadFile, File
 from sqlalchemy import select, update, func
@@ -6,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.db.base  # noqa: F401 — ensure all models are registered for relationships
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_async_session
 from app.dependencies import get_current_user
 from app.models.nutrition import FoodItem, NutritionLog, NutritionPlan
@@ -61,19 +62,25 @@ async def list_plans(
     ]
 
 
-@router.get("/plans/{plan_id}", response_model=NutritionPlanRead)
-async def get_plan(
-    plan_id: str,
+@router.get("/plans/active", response_model=NutritionPlanRead | None)
+async def get_active_plan(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
+    """Return the currently active nutrition plan, or null if none."""
     result = await db.execute(
-        select(NutritionPlan).where(NutritionPlan.id == plan_id, NutritionPlan.user_id == user.id)
+        select(NutritionPlan).where(
+            NutritionPlan.user_id == user.id,
+            NutritionPlan.is_active == True,  # noqa: E712
+        )
     )
     plan = result.scalar_one_or_none()
     if not plan:
-        raise NotFoundError("Nutrition plan")
+        return None
+    return await _build_plan_response(plan)
 
+
+async def _build_plan_response(plan: NutritionPlan) -> NutritionPlanRead:
     meals = []
     for m in plan.meals:
         items = []
@@ -121,28 +128,74 @@ async def get_plan(
     )
 
 
-@router.post("/plans/{plan_id}/activate")
-async def activate_plan(
-    plan_id: str,
+@router.get("/plans/{plan_id}", response_model=NutritionPlanRead)
+async def get_plan(
+    plan_id: UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    await db.execute(
-        update(NutritionPlan).where(NutritionPlan.user_id == user.id).values(is_active=False)
-    )
     result = await db.execute(
         select(NutritionPlan).where(NutritionPlan.id == plan_id, NutritionPlan.user_id == user.id)
     )
     plan = result.scalar_one_or_none()
     if not plan:
         raise NotFoundError("Nutrition plan")
+
+    return await _build_plan_response(plan)
+
+
+@router.post("/plans/{plan_id}/activate")
+async def activate_plan(
+    plan_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    from sqlalchemy import text
+
+    from app.core.locks import advisory_key
+
+    # Verify ownership BEFORE the bulk deactivate so a 404 on a foreign
+    # plan_id can't leave the user with no active plan.
+    result = await db.execute(
+        select(NutritionPlan).where(NutritionPlan.id == plan_id, NutritionPlan.user_id == user.id)
+    )
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise NotFoundError("Nutrition plan")
+
+    # Serialize concurrent activations for the same user — otherwise two
+    # POSTs interleave and both plans end up active.
+    lock_key = advisory_key("activate_nutrition_plan", str(user.id))
+    await db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": lock_key})
+
+    await db.execute(
+        update(NutritionPlan).where(NutritionPlan.user_id == user.id).values(is_active=False)
+    )
     plan.is_active = True
     return {"detail": "Plan activated"}
 
 
+@router.delete("/plans/{plan_id}")
+async def delete_plan(
+    plan_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    result = await db.execute(
+        select(NutritionPlan).where(
+            NutritionPlan.id == plan_id, NutritionPlan.user_id == user.id
+        )
+    )
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise NotFoundError("Nutrition plan")
+    await db.delete(plan)
+    return {"detail": "Plan deleted"}
+
+
 @router.get("/foods/search", response_model=list[FoodItemRead])
 async def search_foods(
-    q: str = Query(""),
+    q: str = Query("", max_length=200),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     user: User = Depends(get_current_user),
@@ -151,8 +204,12 @@ async def search_foods(
     """Search food items. Frontend calls GET /nutrition/foods/search?q=..."""
     query = select(FoodItem)
     if q:
+        # Escape LIKE wildcards so a single "%" or "_" can't dump the whole catalog.
+        escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
         query = query.where(
-            FoodItem.name_ru.ilike(f"%{q}%") | FoodItem.name.ilike(f"%{q}%")
+            FoodItem.name_ru.ilike(pattern, escape="\\")
+            | FoodItem.name.ilike(pattern, escape="\\")
         )
     query = query.offset((page - 1) * per_page).limit(per_page)
     result = await db.execute(query)
@@ -181,19 +238,22 @@ async def log_food(
     db: AsyncSession = Depends(get_async_session),
 ):
     """Log a food entry. Frontend calls POST /nutrition/logs."""
-    # Parse logged_at: frontend may send ISO string or None
-    logged_date: date
     if data.logged_at:
-        try:
-            logged_date = datetime.fromisoformat(data.logged_at.replace("Z", "+00:00")).date()
-        except (ValueError, AttributeError):
-            logged_date = date.today()
+        # Schema validator already enforced ISO format and a sane window.
+        logged_date = datetime.fromisoformat(data.logged_at).date()
     else:
         logged_date = date.today()
 
+    if data.food_item_id is not None:
+        food_exists = await db.execute(
+            select(FoodItem.id).where(FoodItem.id == data.food_item_id)
+        )
+        if food_exists.scalar_one_or_none() is None:
+            raise BadRequestError("Unknown food_item_id")
+
     log = NutritionLog(
         user_id=user.id,
-        food_item_id=data.food_item_id if data.food_item_id else None,
+        food_item_id=data.food_item_id,
         food_name=data.food_name,
         meal_type=data.meal_type,
         quantity_g=data.quantity_g,
@@ -232,7 +292,7 @@ async def get_food_log(
     try:
         target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
     except ValueError:
-        target_date = date.today()
+        raise BadRequestError("Invalid date format (expected YYYY-MM-DD)")
 
     result = await db.execute(
         select(NutritionLog)
@@ -241,6 +301,7 @@ async def get_food_log(
             NutritionLog.logged_at == target_date,
         )
         .order_by(NutritionLog.logged_at.desc())
+        .limit(500)
     )
     return [
         NutritionLogRead(
@@ -260,6 +321,24 @@ async def get_food_log(
     ]
 
 
+@router.delete("/logs/{log_id}")
+async def delete_log(
+    log_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    result = await db.execute(
+        select(NutritionLog).where(
+            NutritionLog.id == log_id, NutritionLog.user_id == user.id
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        raise NotFoundError("Nutrition log")
+    await db.delete(row)
+    return {"detail": "Deleted"}
+
+
 @router.get("/summary", response_model=DailySummary)
 async def daily_summary(
     date_str: str = Query(..., alias="date"),
@@ -270,7 +349,7 @@ async def daily_summary(
     try:
         target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
     except ValueError:
-        target_date = date.today()
+        raise BadRequestError("Invalid date format (expected YYYY-MM-DD)")
 
     result = await db.execute(
         select(
@@ -300,7 +379,25 @@ async def recognize_food(
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
 ):
-    from app.services.ai.food_recognizer import recognize_food_from_photo
+    from app.services.ai.food_recognizer import (
+        MAX_RECOGNIZE_BYTES,
+        recognize_food_from_photo,
+    )
 
-    image_data = await file.read()
+    # Stream-read with a hard byte ceiling so a 200 MB upload can't sit in
+    # RAM while we crawl through `await file.read()`.
+    chunks: list[bytes] = []
+    received = 0
+    while True:
+        chunk = await file.read(64 * 1024)
+        if not chunk:
+            break
+        received += len(chunk)
+        if received > MAX_RECOGNIZE_BYTES:
+            raise BadRequestError(
+                f"Image too large (max {MAX_RECOGNIZE_BYTES // (1024 * 1024)} MB)"
+            )
+        chunks.append(chunk)
+
+    image_data = b"".join(chunks)
     return await recognize_food_from_photo(image_data)

@@ -1,10 +1,12 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.db.base  # noqa: F401 — ensure all models are registered for relationships
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_async_session
 from app.dependencies import get_current_user
 from app.models.profile import MedicalRestriction, UserMedicalRestriction, UserProfile
@@ -18,7 +20,7 @@ async def _read_profile_restrictions(
     db: AsyncSession, profile_id
 ) -> list[MedicalRestrictionRead]:
     result = await db.execute(
-        select(MedicalRestriction)
+        select(MedicalRestriction, UserMedicalRestriction.notes)
         .join(
             UserMedicalRestriction,
             UserMedicalRestriction.medical_restriction_id == MedicalRestriction.id,
@@ -31,8 +33,9 @@ async def _read_profile_restrictions(
             id=str(restriction.id),
             name=restriction.name,
             description=restriction.description,
+            notes=notes,
         )
-        for restriction in result.scalars()
+        for restriction, notes in result.all()
     ]
 
 
@@ -83,6 +86,8 @@ async def create_or_update_profile(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
+    from sqlalchemy.exc import IntegrityError
+
     result = await db.execute(
         select(UserProfile).where(UserProfile.user_id == user.id)
     )
@@ -99,10 +104,44 @@ async def create_or_update_profile(
             **update_data,
         )
         db.add(profile)
-        await db.flush()
+        try:
+            await db.flush()
+        except IntegrityError:
+            # Concurrent first-time onboarding (double-click) — another
+            # request already created the profile under user_profiles.user_id
+            # UNIQUE. Re-fetch and merge instead of returning 500.
+            await db.rollback()
+            re_fetch = await db.execute(
+                select(UserProfile).where(UserProfile.user_id == user.id)
+            )
+            profile = re_fetch.scalar_one()
+            for field, value in update_data.items():
+                setattr(profile, field, value)
+            await db.flush()
 
     # Handle medical restrictions
     if data.medical_restriction_ids is not None:
+        unique_restriction_ids: list[UUID] = []
+        seen: set[UUID] = set()
+        for rid in data.medical_restriction_ids:
+            if rid not in seen:
+                seen.add(rid)
+                unique_restriction_ids.append(rid)
+
+        # Validate that all referenced restrictions exist before mutating
+        if unique_restriction_ids:
+            existing_ids = await db.execute(
+                select(MedicalRestriction.id).where(
+                    MedicalRestriction.id.in_(unique_restriction_ids)
+                )
+            )
+            found = {str(r) for r in existing_ids.scalars()}
+            missing_count = sum(1 for rid in unique_restriction_ids if str(rid) not in found)
+            if missing_count:
+                raise BadRequestError(
+                    f"Unknown medical_restriction_ids ({missing_count})"
+                )
+
         # Remove existing
         existing = await db.execute(
             select(UserMedicalRestriction).where(
@@ -113,7 +152,7 @@ async def create_or_update_profile(
             await db.delete(umr)
 
         # Add new
-        for rid in data.medical_restriction_ids:
+        for rid in unique_restriction_ids:
             umr = UserMedicalRestriction(
                 user_profile_id=profile.id,
                 medical_restriction_id=rid,

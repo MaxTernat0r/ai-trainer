@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, update
@@ -15,6 +16,7 @@ from app.models.workout import ExerciseSet, ScheduledWorkout, WorkoutExercise, W
 from app.schemas.workout import (
     AddScheduleEntryRequest,
     CalendarEntry,
+    CompleteEntryRequest,
     ExerciseSetLog,
     ExerciseSetRead,
     GenerateWorkoutRequest,
@@ -65,7 +67,7 @@ async def list_plans(
 
 @router.get("/plans/{plan_id}", response_model=WorkoutPlanRead)
 async def get_plan(
-    plan_id: str,
+    plan_id: UUID,
     entry_id: str | None = Query(None, description="Filter logged_sets to this ScheduledWorkout"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
@@ -78,7 +80,13 @@ async def get_plan(
         raise NotFoundError("Workout plan")
 
     # If entry_id is given, only show sets belonging to that scheduled workout
-    entry_uuid = uuid.UUID(entry_id) if entry_id else None
+    entry_uuid: uuid.UUID | None = None
+    if entry_id:
+        try:
+            entry_uuid = uuid.UUID(entry_id)
+        except ValueError:
+            from app.core.exceptions import BadRequestError
+            raise BadRequestError("Invalid entry_id")
 
     sessions = []
     for s in plan.sessions:
@@ -141,17 +149,17 @@ async def get_plan(
 
 @router.post("/plans/{plan_id}/activate")
 async def activate_plan(
-    plan_id: str,
+    plan_id: UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    # Deactivate all other plans
-    await db.execute(
-        update(WorkoutPlan)
-        .where(WorkoutPlan.user_id == user.id)
-        .values(is_active=False)
-    )
+    from sqlalchemy import text
 
+    from app.core.locks import advisory_key
+
+    # Verify the target plan belongs to the user BEFORE touching anything;
+    # otherwise a 404 on a foreign plan_id would still have wiped is_active
+    # on every plan the user owns.
     result = await db.execute(
         select(WorkoutPlan).where(WorkoutPlan.id == plan_id, WorkoutPlan.user_id == user.id)
     )
@@ -159,13 +167,26 @@ async def activate_plan(
     if not plan:
         raise NotFoundError("Workout plan")
 
+    # Serialize concurrent activations for the same user. Two simultaneous
+    # POSTs for different plan_ids would otherwise both deactivate, both
+    # set their own is_active=True, and leave the user with multiple
+    # active plans.
+    lock_key = advisory_key("activate_workout_plan", str(user.id))
+    await db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": lock_key})
+
+    await db.execute(
+        update(WorkoutPlan)
+        .where(WorkoutPlan.user_id == user.id)
+        .values(is_active=False)
+    )
+
     plan.is_active = True
     return {"detail": "Plan activated"}
 
 
 @router.delete("/plans/{plan_id}")
 async def delete_plan(
-    plan_id: str,
+    plan_id: UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
@@ -181,21 +202,52 @@ async def delete_plan(
 
 @router.post("/exercises/{workout_exercise_id}/log")
 async def log_set(
-    workout_exercise_id: str,
+    workout_exercise_id: UUID,
     data: ExerciseSetLog,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
+    from sqlalchemy.exc import IntegrityError
+
+    from app.core.exceptions import BadRequestError, ConflictError
+
     result = await db.execute(
-        select(WorkoutExercise).where(WorkoutExercise.id == workout_exercise_id)
+        select(WorkoutExercise)
+        .join(WorkoutSession, WorkoutExercise.workout_session_id == WorkoutSession.id)
+        .join(WorkoutPlan, WorkoutSession.workout_plan_id == WorkoutPlan.id)
+        .where(
+            WorkoutExercise.id == workout_exercise_id,
+            WorkoutPlan.user_id == user.id,
+        )
     )
     we = result.scalar_one_or_none()
     if not we:
         raise NotFoundError("Workout exercise")
 
+    # Cap unreasonable set numbers. We allow some slack over target_sets so a
+    # user adding an extra "burnout" set isn't blocked, but reject obvious
+    # garbage so analytics charts don't blow up.
+    set_cap = max(20, (we.target_sets or 0) * 3)
+    if data.set_number > set_cap:
+        raise BadRequestError(
+            f"set_number is too large for this exercise (cap {set_cap})"
+        )
+
+    if data.scheduled_workout_id:
+        sw_owner = await db.execute(
+            select(ScheduledWorkout.id)
+            .join(WorkoutPlan, ScheduledWorkout.workout_plan_id == WorkoutPlan.id)
+            .where(
+                ScheduledWorkout.id == data.scheduled_workout_id,
+                WorkoutPlan.user_id == user.id,
+            )
+        )
+        if sw_owner.scalar_one_or_none() is None:
+            raise NotFoundError("Scheduled workout")
+
     exercise_set = ExerciseSet(
-        workout_exercise_id=uuid.UUID(workout_exercise_id),
-        scheduled_workout_id=uuid.UUID(data.scheduled_workout_id) if data.scheduled_workout_id else None,
+        workout_exercise_id=workout_exercise_id,
+        scheduled_workout_id=data.scheduled_workout_id,
         set_number=data.set_number,
         reps_completed=data.reps_completed,
         weight_kg=data.weight_kg,
@@ -204,7 +256,13 @@ async def log_set(
         completed_at=datetime.now(timezone.utc),
     )
     db.add(exercise_set)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        # The unique index `(workout_exercise_id, scheduled_workout_id, set_number)`
+        # protects against double-tap retries from the client.
+        await db.rollback()
+        raise ConflictError("Set already logged")
 
     return ExerciseSetRead(
         id=str(exercise_set.id),
@@ -228,6 +286,8 @@ async def start_workout(
     Used when the user starts a workout: if there's already a scheduled
     entry for this session on this date, return it; otherwise create one.
     """
+    from sqlalchemy.exc import IntegrityError
+
     # Verify session belongs to user and fetch plan title
     result = await db.execute(
         select(WorkoutSession, WorkoutPlan.title)
@@ -242,25 +302,13 @@ async def start_workout(
         raise NotFoundError("Workout session")
     session, plan_title = row
 
-    # Check for existing entry on this date for this session
-    existing = await db.execute(
-        select(ScheduledWorkout).where(
-            ScheduledWorkout.workout_session_id == session.id,
-            ScheduledWorkout.scheduled_date == data.scheduled_date,
-        )
+    sw = await _find_or_create_scheduled_workout(
+        db,
+        plan_id=session.workout_plan_id,
+        session_id=session.id,
+        scheduled_date=data.scheduled_date,
+        is_completed=False,
     )
-    sw = existing.scalar_one_or_none()
-
-    if not sw:
-        sw = ScheduledWorkout(
-            workout_plan_id=session.workout_plan_id,
-            workout_session_id=session.id,
-            scheduled_date=data.scheduled_date,
-            week_number=0,
-            is_completed=False,
-        )
-        db.add(sw)
-        await db.flush()
 
     return CalendarEntry(
         id=str(sw.id),
@@ -273,6 +321,53 @@ async def start_workout(
         plan_title=plan_title,
         is_completed=sw.is_completed,
     )
+
+
+async def _find_or_create_scheduled_workout(
+    db: AsyncSession,
+    *,
+    plan_id: uuid.UUID,
+    session_id: uuid.UUID,
+    scheduled_date,
+    is_completed: bool,
+) -> "ScheduledWorkout":
+    """Race-safe find-or-create for ScheduledWorkout(session_id, date).
+
+    A unique index on (workout_session_id, scheduled_date) backs this — on
+    the unlucky concurrent insert, IntegrityError fires and we re-fetch.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    existing = await db.execute(
+        select(ScheduledWorkout).where(
+            ScheduledWorkout.workout_session_id == session_id,
+            ScheduledWorkout.scheduled_date == scheduled_date,
+        )
+    )
+    sw = existing.scalar_one_or_none()
+    if sw is not None:
+        return sw
+
+    sw = ScheduledWorkout(
+        workout_plan_id=plan_id,
+        workout_session_id=session_id,
+        scheduled_date=scheduled_date,
+        week_number=0,
+        is_completed=is_completed,
+    )
+    db.add(sw)
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        re_fetch = await db.execute(
+            select(ScheduledWorkout).where(
+                ScheduledWorkout.workout_session_id == session_id,
+                ScheduledWorkout.scheduled_date == scheduled_date,
+            )
+        )
+        sw = re_fetch.scalar_one()
+    return sw
 
 
 def _training_weekdays(days_per_week: int) -> list[int]:
@@ -290,8 +385,8 @@ def _training_weekdays(days_per_week: int) -> list[int]:
 
 @router.get("/calendar", response_model=list[CalendarEntry])
 async def get_calendar(
-    year: int = Query(...),
-    month: int = Query(...),
+    year: int = Query(..., ge=1970, le=2100),
+    month: int = Query(..., ge=1, le=12),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
@@ -336,12 +431,14 @@ async def get_calendar(
 
 @router.patch("/schedule/{entry_id}/reschedule")
 async def reschedule_entry(
-    entry_id: str,
+    entry_id: UUID,
     data: RescheduleRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Reschedule a single scheduled workout entry to a new date."""
+    from app.core.exceptions import ConflictError
+
     result = await db.execute(
         select(ScheduledWorkout)
         .join(WorkoutPlan, ScheduledWorkout.workout_plan_id == WorkoutPlan.id)
@@ -353,6 +450,20 @@ async def reschedule_entry(
     sw = result.scalar_one_or_none()
     if not sw:
         raise NotFoundError("Scheduled workout")
+
+    # Reject moves that would collide with another entry of the same session
+    # on that date — auto_schedule and start_workout treat (session, date) as
+    # the dedup key, so we have to enforce the same invariant here.
+    if sw.scheduled_date != data.scheduled_date:
+        clash = await db.execute(
+            select(ScheduledWorkout.id).where(
+                ScheduledWorkout.workout_session_id == sw.workout_session_id,
+                ScheduledWorkout.scheduled_date == data.scheduled_date,
+                ScheduledWorkout.id != sw.id,
+            )
+        )
+        if clash.scalar_one_or_none() is not None:
+            raise ConflictError("Another entry already exists on that date")
 
     sw.scheduled_date = data.scheduled_date
     return {"detail": "Rescheduled", "scheduled_date": str(data.scheduled_date)}
@@ -360,11 +471,16 @@ async def reschedule_entry(
 
 @router.patch("/schedule/{entry_id}/complete")
 async def toggle_complete_entry(
-    entry_id: str,
+    entry_id: UUID,
+    data: CompleteEntryRequest | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Toggle is_completed for a scheduled workout entry."""
+    """Set or toggle is_completed for a scheduled workout entry.
+
+    Body {"is_completed": bool} sets explicitly. Empty body toggles
+    (legacy behavior).
+    """
     result = await db.execute(
         select(ScheduledWorkout)
         .join(WorkoutPlan, ScheduledWorkout.workout_plan_id == WorkoutPlan.id)
@@ -377,7 +493,10 @@ async def toggle_complete_entry(
     if not sw:
         raise NotFoundError("Scheduled workout")
 
-    sw.is_completed = not sw.is_completed
+    if data is not None and data.is_completed is not None:
+        sw.is_completed = data.is_completed
+    else:
+        sw.is_completed = not sw.is_completed
     return {"detail": "Updated", "is_completed": sw.is_completed}
 
 
@@ -387,7 +506,12 @@ async def add_schedule_entry(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Add an ad-hoc workout to the calendar (e.g. unscheduled workout done today)."""
+    """Add an ad-hoc workout to the calendar (e.g. unscheduled workout done today).
+
+    If an entry already exists for this session on this date, return it
+    instead of creating a duplicate — this is also the contract callers can
+    rely on for idempotent retries.
+    """
     # Verify session belongs to user's active plan and fetch plan title
     result = await db.execute(
         select(WorkoutSession, WorkoutPlan.title)
@@ -402,22 +526,20 @@ async def add_schedule_entry(
         raise NotFoundError("Workout session")
     session, plan_title = row
 
-    sw = ScheduledWorkout(
-        workout_plan_id=session.workout_plan_id,
-        workout_session_id=session.id,
+    sw = await _find_or_create_scheduled_workout(
+        db,
+        plan_id=session.workout_plan_id,
+        session_id=session.id,
         scheduled_date=data.scheduled_date,
-        week_number=0,  # ad-hoc entry
         is_completed=data.is_completed,
     )
-    db.add(sw)
-    await db.flush()
 
     return CalendarEntry(
         id=str(sw.id),
         session_id=str(session.id),
         session_name=session.name,
         day_number=session.day_number,
-        week_number=0,
+        week_number=sw.week_number,
         scheduled_date=sw.scheduled_date,
         plan_id=str(session.workout_plan_id),
         plan_title=plan_title,
@@ -427,7 +549,7 @@ async def add_schedule_entry(
 
 @router.delete("/schedule/{entry_id}")
 async def delete_schedule_entry(
-    entry_id: str,
+    entry_id: UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
@@ -450,7 +572,7 @@ async def delete_schedule_entry(
 
 @router.post("/plans/{plan_id}/schedule")
 async def auto_schedule_plan(
-    plan_id: str,
+    plan_id: UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
@@ -459,9 +581,16 @@ async def auto_schedule_plan(
     Creates one ScheduledWorkout row per session per week.
     E.g. 8 weeks × 2 days/week = 16 rows.
     Respects days_per_week from the plan.
+
+    Preserves any already-completed entries and any entries with logged sets
+    so users don't lose history when they regenerate the schedule. Concurrent
+    callers serialize on a per-plan advisory lock so a double-click can't
+    leave duplicate rows behind.
     """
     from datetime import date, timedelta
-    from sqlalchemy import delete
+    from sqlalchemy import delete, text
+
+    from app.core.locks import advisory_key
 
     result = await db.execute(
         select(WorkoutPlan).where(WorkoutPlan.id == plan_id, WorkoutPlan.user_id == user.id)
@@ -470,10 +599,22 @@ async def auto_schedule_plan(
     if not plan:
         raise NotFoundError("Workout plan")
 
-    # Delete old schedule for this plan
-    await db.execute(
-        delete(ScheduledWorkout).where(ScheduledWorkout.workout_plan_id == plan.id)
+    lock_key = advisory_key("auto_schedule", str(plan.id))
+    await db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": lock_key})
+
+    has_set = (
+        select(ExerciseSet.id)
+        .where(ExerciseSet.scheduled_workout_id == ScheduledWorkout.id)
+        .exists()
     )
+    await db.execute(
+        delete(ScheduledWorkout).where(
+            ScheduledWorkout.workout_plan_id == plan.id,
+            ScheduledWorkout.is_completed == False,  # noqa: E712
+            ~has_set,
+        )
+    )
+    await db.flush()
 
     sessions = plan.sessions
     if not sessions:
@@ -481,24 +622,39 @@ async def auto_schedule_plan(
 
     today = date.today()
     weekdays = _training_weekdays(plan.days_per_week)
-    num_sessions = len(sessions)  # e.g. 2 session templates
+    num_sessions = len(sessions)
     total_entries = 0
 
-    # For each week, assign session templates to training weekdays
+    existing_keys_result = await db.execute(
+        select(
+            ScheduledWorkout.workout_session_id,
+            ScheduledWorkout.scheduled_date,
+        ).where(ScheduledWorkout.workout_plan_id == plan.id)
+    )
+    existing_keys = {(sid, sd) for sid, sd in existing_keys_result.all()}
+
+    # Anchor week 0 to "today onwards" so weekdays earlier than today don't
+    # silently disappear from the first week. Otherwise a Wednesday-Friday
+    # plan kicked off on Thursday loses its Wednesday session forever.
+    week_one_monday = today - timedelta(days=today.weekday())
     for week in range(plan.duration_weeks):
-        # Find the Monday of the target week
-        # Week 0 starts from the next available training weekday
-        week_start = today + timedelta(weeks=week)
-        # Align to Monday
-        week_monday = week_start - timedelta(days=week_start.weekday())
+        week_monday = week_one_monday + timedelta(weeks=week)
 
         for day_idx, weekday in enumerate(weekdays):
-            # Cycle through session templates
             session = sessions[day_idx % num_sessions]
             training_date = week_monday + timedelta(days=weekday)
 
-            # Skip dates in the past (for week 0)
             if training_date < today:
+                # Past day in week 0 — push to the equivalent weekday after
+                # the plan's normal end so the user still gets `duration_weeks`
+                # worth of sessions.
+                training_date = (
+                    week_one_monday
+                    + timedelta(weeks=plan.duration_weeks)
+                    + timedelta(days=weekday)
+                )
+
+            if (session.id, training_date) in existing_keys:
                 continue
 
             sw = ScheduledWorkout(
@@ -508,6 +664,7 @@ async def auto_schedule_plan(
                 week_number=week + 1,
             )
             db.add(sw)
+            existing_keys.add((session.id, training_date))
             total_entries += 1
 
     return {"detail": f"Scheduled {total_entries} workouts across {plan.duration_weeks} weeks"}

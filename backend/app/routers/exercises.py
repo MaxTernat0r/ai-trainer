@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,11 +24,11 @@ router = APIRouter(prefix="/exercises", tags=["exercises"])
 
 @router.get("", response_model=list[ExerciseListRead])
 async def list_exercises(
-    muscle_group_id: str | None = Query(None),
-    equipment_id: str | None = Query(None),
-    difficulty: str | None = Query(None),
-    exercise_type: str | None = Query(None),
-    search: str | None = Query(None),
+    muscle_group_id: UUID | None = Query(None),
+    equipment_id: UUID | None = Query(None),
+    difficulty: str | None = Query(None, max_length=32),
+    exercise_type: str | None = Query(None, max_length=32),
+    search: str | None = Query(None, max_length=200),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     user: User = Depends(get_current_user),
@@ -45,8 +47,11 @@ async def list_exercises(
     if exercise_type:
         query = query.where(Exercise.exercise_type == exercise_type)
     if search:
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
         query = query.where(
-            Exercise.name_ru.ilike(f"%{search}%") | Exercise.name.ilike(f"%{search}%")
+            Exercise.name_ru.ilike(pattern, escape="\\")
+            | Exercise.name.ilike(pattern, escape="\\")
         )
 
     query = query.offset((page - 1) * per_page).limit(per_page)
@@ -98,7 +103,7 @@ async def list_equipment(
 
 @router.get("/{exercise_id}", response_model=ExerciseRead)
 async def get_exercise(
-    exercise_id: str,
+    exercise_id: UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):

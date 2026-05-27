@@ -26,7 +26,17 @@ class WorkoutPlan(BaseModel):
 
     user: Mapped["User"] = relationship(back_populates="workout_plans")  # type: ignore[name-defined]  # noqa: F821
     sessions: Mapped[list["WorkoutSession"]] = relationship(
-        back_populates="workout_plan", lazy="selectin", order_by="WorkoutSession.order_index"
+        back_populates="workout_plan",
+        lazy="selectin",
+        order_by="WorkoutSession.order_index",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    scheduled_workouts: Mapped[list["ScheduledWorkout"]] = relationship(
+        back_populates="workout_plan",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
 
@@ -44,7 +54,11 @@ class WorkoutSession(BaseModel):
 
     workout_plan: Mapped["WorkoutPlan"] = relationship(back_populates="sessions")
     exercises: Mapped[list["WorkoutExercise"]] = relationship(
-        back_populates="workout_session", lazy="selectin", order_by="WorkoutExercise.order_index"
+        back_populates="workout_session",
+        lazy="selectin",
+        order_by="WorkoutExercise.order_index",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
 
@@ -65,7 +79,12 @@ class WorkoutExercise(BaseModel):
 
     workout_session: Mapped["WorkoutSession"] = relationship(back_populates="exercises")
     exercise: Mapped["Exercise"] = relationship(lazy="selectin")  # type: ignore[name-defined]  # noqa: F821
-    logged_sets: Mapped[list["ExerciseSet"]] = relationship(back_populates="workout_exercise", lazy="selectin")
+    logged_sets: Mapped[list["ExerciseSet"]] = relationship(
+        back_populates="workout_exercise",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class ScheduledWorkout(BaseModel):
@@ -87,7 +106,7 @@ class ScheduledWorkout(BaseModel):
     week_number: Mapped[int] = mapped_column(Integer, nullable=False)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    workout_plan: Mapped["WorkoutPlan"] = relationship(lazy="selectin")
+    workout_plan: Mapped["WorkoutPlan"] = relationship(back_populates="scheduled_workouts", lazy="selectin")
     workout_session: Mapped["WorkoutSession"] = relationship(lazy="selectin")
 
 

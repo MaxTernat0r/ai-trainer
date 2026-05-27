@@ -1,11 +1,14 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta, timezone
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.db.base  # noqa: F401 — ensure all models are registered for relationships
 
+from app.core.exceptions import NotFoundError
 from app.db.session import get_async_session
 from app.dependencies import get_current_user
 from app.models.analytics import MeasurementLog, WeightLog
@@ -56,13 +59,29 @@ async def log_weight(
     db: AsyncSession = Depends(get_async_session),
 ):
     logged_date = _parse_optional_date(data.logged_at)
+
+    # Idempotent per day: a unique index on (user_id, logged_at) means a
+    # double-tap or "I weighed myself again" both end up on the same row,
+    # so weight_change_30d doesn't flicker between two same-day samples.
     log = WeightLog(
         user_id=user.id,
         weight_kg=data.weight_kg,
         logged_at=logged_date,
     )
     db.add(log)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        existing = await db.execute(
+            select(WeightLog).where(
+                WeightLog.user_id == user.id,
+                WeightLog.logged_at == logged_date,
+            )
+        )
+        log = existing.scalar_one()
+        log.weight_kg = data.weight_kg
+        await db.flush()
     return WeightLogRead(id=str(log.id), weight_kg=log.weight_kg, logged_at=log.logged_at)
 
 
@@ -83,6 +102,22 @@ async def get_weight_history(
     ]
 
 
+@router.delete("/weight/{log_id}")
+async def delete_weight(
+    log_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    result = await db.execute(
+        select(WeightLog).where(WeightLog.id == log_id, WeightLog.user_id == user.id)
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        raise NotFoundError("Weight log")
+    await db.delete(row)
+    return {"detail": "Deleted"}
+
+
 @router.post("/measurements", response_model=MeasurementRead)
 async def log_measurement(
     data: MeasurementCreate,
@@ -97,7 +132,22 @@ async def log_measurement(
         logged_at=logged_date,
     )
     db.add(log)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        # Unique on (user_id, measurement_type, logged_at) — overwrite the
+        # existing same-day measurement instead of creating a duplicate row.
+        await db.rollback()
+        existing = await db.execute(
+            select(MeasurementLog).where(
+                MeasurementLog.user_id == user.id,
+                MeasurementLog.measurement_type == data.measurement_type,
+                MeasurementLog.logged_at == logged_date,
+            )
+        )
+        log = existing.scalar_one()
+        log.value_cm = data.value_cm
+        await db.flush()
     return MeasurementRead(
         id=str(log.id),
         measurement_type=log.measurement_type,
@@ -130,6 +180,24 @@ async def get_measurements(
     ]
 
 
+@router.delete("/measurements/{log_id}")
+async def delete_measurement(
+    log_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    result = await db.execute(
+        select(MeasurementLog).where(
+            MeasurementLog.id == log_id, MeasurementLog.user_id == user.id
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        raise NotFoundError("Measurement")
+    await db.delete(row)
+    return {"detail": "Deleted"}
+
+
 @router.get("/dashboard", response_model=DashboardData)
 async def get_dashboard(
     user: User = Depends(get_current_user),
@@ -138,7 +206,10 @@ async def get_dashboard(
     today = date.today()
     thirty_days_ago = today - timedelta(days=30)
     week_start = today - timedelta(days=today.weekday())  # Monday of current week
-    week_start_dt = datetime.combine(week_start, datetime.min.time())
+    # ExerciseSet.completed_at is TIMESTAMPTZ; comparing to a naive datetime
+    # makes Postgres interpret it in the session timezone (UTC under asyncpg)
+    # which silently shifts the boundary for users in other timezones.
+    week_start_dt = datetime.combine(week_start, time.min, tzinfo=timezone.utc)
 
     # Latest weight
     weight_result = await db.execute(
@@ -180,52 +251,59 @@ async def get_dashboard(
     cal_today, protein_today = nutrition_result.one()
 
     # Workouts this week: count distinct days with logged exercise sets this week
-    # We join ExerciseSet -> WorkoutExercise to filter by user's workout plans
-    workouts_week = 0
-    try:
-        days_result = await db.execute(
-            select(
-                func.count(
-                    func.distinct(func.date_trunc("day", ExerciseSet.completed_at))
-                )
+    # filtered by the current user's workout plans (ownership chain).
+    days_result = await db.execute(
+        select(
+            func.count(
+                func.distinct(func.date_trunc("day", ExerciseSet.completed_at))
             )
-            .select_from(ExerciseSet)
-            .where(ExerciseSet.completed_at >= week_start_dt)
         )
-        workouts_week = days_result.scalar() or 0
-    except Exception:
-        workouts_week = 0
+        .select_from(ExerciseSet)
+        .join(WorkoutExercise, ExerciseSet.workout_exercise_id == WorkoutExercise.id)
+        .join(WorkoutSession, WorkoutExercise.workout_session_id == WorkoutSession.id)
+        .join(WorkoutPlan, WorkoutSession.workout_plan_id == WorkoutPlan.id)
+        .where(
+            WorkoutPlan.user_id == user.id,
+            ExerciseSet.completed_at >= week_start_dt,
+        )
+    )
+    workouts_week = days_result.scalar() or 0
 
-    # Streak: consecutive days with any logged activity (nutrition or exercise)
+    # Streak: consecutive days with any logged activity (nutrition or exercise).
+    # Old version fired up to 732 sequential queries — now we fetch the last
+    # 366 distinct activity-days in two queries and walk them in Python.
+    streak_window_start = today - timedelta(days=365)
+    nutrition_days_result = await db.execute(
+        select(func.distinct(NutritionLog.logged_at)).where(
+            NutritionLog.user_id == user.id,
+            NutritionLog.logged_at >= streak_window_start,
+            NutritionLog.logged_at <= today,
+        )
+    )
+    activity_days: set[date] = set(nutrition_days_result.scalars().all())
+
+    set_days_result = await db.execute(
+        select(
+            func.distinct(func.date_trunc("day", ExerciseSet.completed_at))
+        )
+        .select_from(ExerciseSet)
+        .join(WorkoutExercise, ExerciseSet.workout_exercise_id == WorkoutExercise.id)
+        .join(WorkoutSession, WorkoutExercise.workout_session_id == WorkoutSession.id)
+        .join(WorkoutPlan, WorkoutSession.workout_plan_id == WorkoutPlan.id)
+        .where(
+            WorkoutPlan.user_id == user.id,
+            ExerciseSet.completed_at >= datetime.combine(streak_window_start, time.min, tzinfo=timezone.utc),
+        )
+    )
+    for day_dt in set_days_result.scalars().all():
+        if day_dt is not None:
+            activity_days.add(day_dt.date() if hasattr(day_dt, "date") else day_dt)
+
     streak_days = 0
     check_date = today
-    for _ in range(366):  # safety limit
-        # Check nutrition logs
-        has_nutrition = await db.execute(
-            select(func.count(NutritionLog.id)).where(
-                NutritionLog.user_id == user.id,
-                NutritionLog.logged_at == check_date,
-            )
-        )
-        has_activity = (has_nutrition.scalar() or 0) > 0
-
-        if not has_activity:
-            # Check exercise sets
-            day_start = datetime.combine(check_date, datetime.min.time())
-            day_end = datetime.combine(check_date + timedelta(days=1), datetime.min.time())
-            has_sets = await db.execute(
-                select(func.count(ExerciseSet.id)).where(
-                    ExerciseSet.completed_at >= day_start,
-                    ExerciseSet.completed_at < day_end,
-                )
-            )
-            has_activity = (has_sets.scalar() or 0) > 0
-
-        if has_activity:
-            streak_days += 1
-            check_date -= timedelta(days=1)
-        else:
-            break
+    while check_date in activity_days:
+        streak_days += 1
+        check_date -= timedelta(days=1)
 
     return DashboardData(
         current_weight=_resolve_current_weight(latest_weight, profile),
@@ -275,7 +353,7 @@ async def get_trained_exercises(
 
 @router.get("/exercise-progress/{exercise_id}", response_model=list[BestSetPoint])
 async def get_exercise_progress(
-    exercise_id: str,
+    exercise_id: UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
@@ -339,7 +417,7 @@ async def get_exercise_progress(
 
 @router.get("/exercise-sessions/{exercise_id}", response_model=list[SessionSets])
 async def get_exercise_sessions(
-    exercise_id: str,
+    exercise_id: UUID,
     limit: int = Query(10, ge=1, le=50),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),

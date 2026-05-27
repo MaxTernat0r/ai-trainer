@@ -1,15 +1,23 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class ConversationCreate(BaseModel):
-    title: str | None = None
+    title: str | None = Field(None, max_length=200)
 
 
 class ChatMessageCreate(BaseModel):
-    content: str
+    content: str = Field(..., min_length=1, max_length=10000)
+
+    @field_validator("content")
+    @classmethod
+    def _strip_and_require(cls, v: str) -> str:
+        stripped = (v or "").strip()
+        if not stripped:
+            raise ValueError("content must not be empty")
+        return stripped
 
 
 class ToolProposalApprove(BaseModel):
