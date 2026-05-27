@@ -29,7 +29,6 @@ crash mid-deploy on existing duplicates.
 """
 from typing import Sequence, Union
 
-import sqlalchemy as sa
 from alembic import op
 
 
@@ -217,31 +216,31 @@ def upgrade() -> None:
     )
 
     # ---------- 2. unique indexes ----------
+    #
+    # Everything below uses CREATE [UNIQUE] INDEX IF NOT EXISTS via op.execute
+    # because:
+    #  - some hot-path indexes (ix_scheduled_workouts_plan_date,
+    #    ix_weight_logs_user_date, ix_measurement_logs_user_type_date) already
+    #    exist on prod from earlier migrations or hand-applied DDL, and
+    #  - this migration runs in a single transaction, so a single duplicate
+    #    would otherwise rollback the whole round-5 hardening.
 
-    op.create_index(
-        "uq_weight_logs_user_date",
-        "weight_logs",
-        ["user_id", "logged_at"],
-        unique=True,
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_weight_logs_user_date "
+        "ON weight_logs (user_id, logged_at)"
     )
-    op.create_index(
-        "uq_measurement_logs_user_type_date",
-        "measurement_logs",
-        ["user_id", "measurement_type", "logged_at"],
-        unique=True,
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_measurement_logs_user_type_date "
+        "ON measurement_logs (user_id, measurement_type, logged_at)"
     )
-    op.create_index(
-        "uq_exercise_sets_we_sw_setnum",
-        "exercise_sets",
-        ["workout_exercise_id", "scheduled_workout_id", "set_number"],
-        unique=True,
-        postgresql_where=sa.text("scheduled_workout_id IS NOT NULL"),
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_exercise_sets_we_sw_setnum "
+        "ON exercise_sets (workout_exercise_id, scheduled_workout_id, set_number) "
+        "WHERE scheduled_workout_id IS NOT NULL"
     )
-    op.create_index(
-        "uq_scheduled_workouts_session_date",
-        "scheduled_workouts",
-        ["workout_session_id", "scheduled_date"],
-        unique=True,
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_scheduled_workouts_session_date "
+        "ON scheduled_workouts (workout_session_id, scheduled_date)"
     )
     op.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_food_items_name_ru_lower "
@@ -263,96 +262,100 @@ def upgrade() -> None:
 
     # Workouts vertical: every read joins down from user → plan → session →
     # exercise → set, plus calendar reads which filter by scheduled_date.
-    op.create_index("ix_workout_plans_user_id", "workout_plans", ["user_id"])
-    op.create_index(
-        "ix_workout_plans_user_active",
-        "workout_plans",
-        ["user_id"],
-        postgresql_where=sa.text("is_active = TRUE"),
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_workout_plans_user_id "
+        "ON workout_plans (user_id)"
     )
-    op.create_index(
-        "ix_workout_sessions_plan_id", "workout_sessions", ["workout_plan_id"]
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_workout_plans_user_active "
+        "ON workout_plans (user_id) WHERE is_active = TRUE"
     )
-    op.create_index(
-        "ix_workout_exercises_session_id",
-        "workout_exercises",
-        ["workout_session_id"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_workout_sessions_plan_id "
+        "ON workout_sessions (workout_plan_id)"
     )
-    op.create_index(
-        "ix_workout_exercises_exercise_id",
-        "workout_exercises",
-        ["exercise_id"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_workout_exercises_session_id "
+        "ON workout_exercises (workout_session_id)"
     )
-    op.create_index(
-        "ix_exercise_sets_workout_exercise_id",
-        "exercise_sets",
-        ["workout_exercise_id"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_workout_exercises_exercise_id "
+        "ON workout_exercises (exercise_id)"
     )
-    op.create_index(
-        "ix_exercise_sets_scheduled_workout_id",
-        "exercise_sets",
-        ["scheduled_workout_id"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_exercise_sets_workout_exercise_id "
+        "ON exercise_sets (workout_exercise_id)"
     )
-    op.create_index(
-        "ix_scheduled_workouts_plan_id",
-        "scheduled_workouts",
-        ["workout_plan_id"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_exercise_sets_scheduled_workout_id "
+        "ON exercise_sets (scheduled_workout_id)"
     )
-    op.create_index(
-        "ix_scheduled_workouts_session_id",
-        "scheduled_workouts",
-        ["workout_session_id"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_scheduled_workouts_plan_id "
+        "ON scheduled_workouts (workout_plan_id)"
     )
-    # calendar(year, month) hits this every time the dashboard renders.
-    op.create_index(
-        "ix_scheduled_workouts_plan_date",
-        "scheduled_workouts",
-        ["workout_plan_id", "scheduled_date"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_scheduled_workouts_session_id "
+        "ON scheduled_workouts (workout_session_id)"
+    )
+    # ix_scheduled_workouts_plan_date is created by e5b2a9d71f4c — we only
+    # ensure it via IF NOT EXISTS in case of hand-applied DDL drift.
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_scheduled_workouts_plan_date "
+        "ON scheduled_workouts (workout_plan_id, scheduled_date)"
     )
 
     # Nutrition vertical.
-    op.create_index("ix_nutrition_plans_user_id", "nutrition_plans", ["user_id"])
-    op.create_index(
-        "ix_nutrition_plans_user_active",
-        "nutrition_plans",
-        ["user_id"],
-        postgresql_where=sa.text("is_active = TRUE"),
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_nutrition_plans_user_id "
+        "ON nutrition_plans (user_id)"
     )
-    op.create_index("ix_meals_nutrition_plan_id", "meals", ["nutrition_plan_id"])
-    op.create_index("ix_meal_items_meal_id", "meal_items", ["meal_id"])
-    op.create_index("ix_meal_items_food_item_id", "meal_items", ["food_item_id"])
-    op.create_index(
-        "ix_nutrition_logs_user_date",
-        "nutrition_logs",
-        ["user_id", "logged_at"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_nutrition_plans_user_active "
+        "ON nutrition_plans (user_id) WHERE is_active = TRUE"
     )
-    op.create_index(
-        "ix_nutrition_logs_food_item_id",
-        "nutrition_logs",
-        ["food_item_id"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_meals_nutrition_plan_id "
+        "ON meals (nutrition_plan_id)"
     )
-
-    # Chat / agent: hot path is "load last 20 messages of conversation", and
-    # the agent_tool_calls audit log filters by (user_id, conversation_id,
-    # is_proposal). The model already adds two composite indexes; we add
-    # plain conversation_id for ChatMessage which is the most common one.
-    op.create_index(
-        "ix_chat_conversations_user_id",
-        "chat_conversations",
-        ["user_id"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_meal_items_meal_id ON meal_items (meal_id)"
     )
-    op.create_index(
-        "ix_chat_messages_conversation_created",
-        "chat_messages",
-        ["conversation_id", "created_at"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_meal_items_food_item_id "
+        "ON meal_items (food_item_id)"
+    )
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_nutrition_logs_user_date "
+        "ON nutrition_logs (user_id, logged_at)"
+    )
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_nutrition_logs_food_item_id "
+        "ON nutrition_logs (food_item_id)"
     )
 
-    # Auth: refresh_token / verification_token lookups by user_id.
-    op.create_index("ix_refresh_tokens_user_id", "refresh_tokens", ["user_id"])
+    # Chat / agent: hot path is "load last 20 messages of conversation".
+    # The agent_tool_calls audit log already has two composite indexes from
+    # the model __table_args__.
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_chat_conversations_user_id "
+        "ON chat_conversations (user_id)"
+    )
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_chat_messages_conversation_created "
+        "ON chat_messages (conversation_id, created_at)"
+    )
+
+    # Auth: refresh_token lookup by user_id.
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_refresh_tokens_user_id "
+        "ON refresh_tokens (user_id)"
+    )
 
     # Analytics: weight_logs / measurement_logs already have composite
-    # (user_id, ...) indexes from the model definition. The new uniques
-    # above ALSO support index lookups, so we don't add duplicates here.
+    # (user_id, ...) indexes from the model definition (ix_weight_logs_user_date,
+    # ix_measurement_logs_user_type_date). The new uniques above ALSO support
+    # index lookups on the same prefixes, so we don't recreate them here.
 
 
 def downgrade() -> None:
